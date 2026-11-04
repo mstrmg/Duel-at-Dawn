@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:single": "node scripts/build-single.mjs"
+    "build:single": "node scripts/build-single.mjs",
+    "build:blade": "node scripts/build-single.mjs blade"
   },
   "dependencies": {
     "three": "0.170.0"

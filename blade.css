@@ -1,0 +1,18 @@
+/* Blade sandbox overlay, on top of the shared paper/ink styles in style.css */
+#bhud { position: fixed; inset: 0; pointer-events: none; }
+#bhud .who { position: absolute; display: flex; flex-direction: column; gap: 4px; font-size: 20px; }
+#bhud .who span { font-size: 22px; letter-spacing: 0.2em; color: var(--ink); }
+#bhud .enemy { left: 50%; top: 18px; transform: translateX(-50%); align-items: center; }
+#bhud .player { left: max(28px, env(safe-area-inset-left, 0px)); bottom: 26px; }
+#aim { display: none; pointer-events: none; }
+body.aiming #game { cursor: none; }
+body.aiming #aim {
+  display: block; position: fixed; left: -9px; top: -9px; width: 18px; height: 18px; z-index: 5;
+  border: 2px solid var(--ink); border-radius: 50% 44% 52% 47%;
+}
+.overlay {
+  position: fixed; inset: 0; display: flex; overflow-y: auto;
+  background: rgba(233, 226, 208, 0.7);
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
+}
+.overlay[hidden] { display: none; }
