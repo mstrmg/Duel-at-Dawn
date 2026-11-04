@@ -2,11 +2,13 @@
 // pressed slightly early still come out.
 
 export const CONTROLS = [
-  ['W A S D', 'Step and circle (always facing your opponent)'],
-  ['1 / 2 / 3, Q / E, or mouse wheel', 'High / Mid / Low stance'],
+  ['Q / E', 'High stance / Low stance'],
+  ['W S', 'Close or open the distance'],
+  ['A D', 'Circle around him'],
   ['Left click or J', 'Strike from your stance'],
   ['Right click or K (hold)', 'Guard your stance. Raise it as the blow lands to parry'],
-  ['Space', 'Dodge (toward the direction you are moving, back by default)'],
+  ['Guard during your own windup', 'Feint: pull the strike back to bait his guard'],
+  ['Space', 'Evade back or sideways. With W held: a quick step in'],
   ['F or Shift (hold, release)', 'Draw-cut: sheathe, charge, release to strike'],
   ['Esc', 'Pause'],
 ];
@@ -18,6 +20,7 @@ export class PlayerController {
     this.attackBuffer = 0;
     this.dodgeBuffer = 0;
     this.iaiLatched = false;
+    this.wanted = null;
   }
 
   update(dt) {
@@ -29,16 +32,15 @@ export class PlayerController {
     // strafe right is -x in fighter space (see models.js); moveInput.x is "right"
     f.moveInput.set(x, y);
 
-    // stance
-    let s = f.displayStance;
-    if (i.wasPressed('Digit1')) s = 0;
-    if (i.wasPressed('Digit2')) s = 1;
-    if (i.wasPressed('Digit3')) s = 2;
-    if (i.wasPressed('KeyQ', 'ArrowUp') || i.wheel < 0) s = Math.max(0, s - 1);
-    if (i.wasPressed('KeyE', 'ArrowDown') || i.wheel > 0) s = Math.min(2, s + 1);
+    // stance: remember what was asked for, and switch as soon as the fighter is free to
+    let s = this.wanted ?? f.displayStance;
+    if (i.wasPressed('KeyQ', 'ArrowUp')) s = 0;
+    if (i.wasPressed('KeyE', 'ArrowDown')) s = 2;
+    this.wanted = s;
     if (s !== f.displayStance) f.setStance(s);
 
-    // guard
+    // guard; raised during your own windup it becomes a feint
+    if (f.state === 'windup' && i.wasPressed('Mouse2', 'KeyK')) f.cancelAttack();
     f.setBlock(i.isDown('Mouse2', 'KeyK'));
 
     // strike

@@ -102,5 +102,6 @@ export class Sound {
   thud() { this.tone(55, 0.45, 0.5); this.noiseBurst({ type: 'lowpass', freq: 200, gain: 0.3, dur: 0.3 }); }
   sheathe() { this.noiseBurst({ type: 'bandpass', freq: 2600, sweepTo: 1200, q: 3, gain: 0.08, dur: 0.25 }); this.tone(2400, 0.03, 0.3); }
   drum() { this.tone(48, 0.6, 1.2); this.tone(96, 0.2, 0.6); this.noiseBurst({ type: 'lowpass', freq: 160, gain: 0.35, dur: 0.6 }); }
+  parry() { this.tone(2900, 0.12, 0.9); this.tone(4400, 0.06, 0.6); this.noiseBurst({ type: 'bandpass', freq: 900, q: 0.7, gain: 0.35, dur: 0.12 }); this.tone(110, 0.3, 0.3); }
   tell() { this.tone(3600, 0.018, 0.25); }
 }

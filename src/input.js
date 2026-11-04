@@ -28,6 +28,14 @@ export class Input {
       this.down.delete(k);
       this.released.add(k);
     });
+    this.mouseY = 0.5;
+    this.mouseX = 0.5;
+    this.mouseMoved = false;
+    addEventListener('mousemove', (e) => {
+      this.mouseX = e.clientX / innerWidth;
+      this.mouseY = e.clientY / innerHeight;
+      this.mouseMoved = true;
+    });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('wheel', (e) => { this.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
     addEventListener('blur', () => {
@@ -42,5 +50,6 @@ export class Input {
     this.pressed.clear();
     this.released.clear();
     this.wheel = 0;
+    this.mouseMoved = false;
   }
 }

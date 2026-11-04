@@ -17,27 +17,31 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 | Input | Action |
 | --- | --- |
-| W A S D | Step and circle. You always face your opponent. |
-| 1 / 2 / 3, Q / E, or mouse wheel | High / Mid / Low stance |
+| Q / E | High stance / Low stance |
+| W / S | Close or open the distance |
+| A / D | Circle around your opponent (you keep the same distance) |
 | Left click or J | Strike from your stance |
 | Right click or K (hold) | Guard your stance. Raise it just as the blow lands to parry. |
-| Space | Dodge toward where you are moving (backstep by default) |
+| Guard during your own windup | Feint: pull the strike back to bait his guard or parry |
+| Space | Evade back or sideways (with i-frames). With W held: a quick, cheaper step in, no i-frames |
 | F or Shift (hold, then release) | Draw-cut: sheathe, charge, release to lunge and strike |
 | Esc | Pause |
 
 ## How a duel works
 
-- **Stances.** High beats Low, Low beats Mid, Mid beats High. A strike from the stance that beats your opponent's current stance winds up faster, and wins when both blades land together. Switching stance takes a moment, so striking from a new stance is slower than striking from one you already hold.
-- **Guard.** A guard only stops a blow aimed at the line you are guarding, so match the stance of the incoming strike.
-- **Parry.** Raise a matching guard within 0.2 s of the blow landing. The attacker is staggered and your next strike is a killing counter.
-- **Breath.** Striking, guarding a hit, dodging and switching stance cost breath. Standing still refills it fastest. Run out and you are winded: open and slow for a moment.
+- **Stances.** Two lines, High and Low. Your guard covers the line of your stance. A strike into the line he is *not* guarding (his open line) winds up faster. Switching stance takes a moment, and striking from a stance you just switched to pays for it.
+- **Guard.** A guard only stops a blow aimed at the line you are guarding, so match the line of the incoming strike.
+- **Parry.** Raise a matching guard within 0.2 s of the blow landing. The moment freezes, ink splashes, the attacker is staggered and your next strike is a killing counter.
+- **Feints.** Raise your guard during your own windup to pull the strike back. If he had already moved to block or parry, he bites and is stuck guarding for a moment: strike him from the other line.
+- **Footwork.** Sideways movement circles your opponent. The dashed arcs on the ground show each weapon's reach, and your name is underlined in the HUD while he is inside your reach (his while you are inside his).
+- **Breath.** Striking, guarding a hit, dodging, stepping, feinting and switching stance cost breath. Standing still refills it fastest. Run out and you are winded: open and slow for a moment.
 - **Draw-cut (iai).** Hold to sheathe and charge, release to lunge. A full charge (red bar) is unblockable and lethal. A miss leaves you exposed for a long second.
 - **Wounds.** You can take two cuts; the third kills. The Ronin and the Spearman fall in two (one if caught staggered, winded or after a whiff).
-- **Tells.** Every enemy strike starts with a windup pose and a red glint on the blade, and their stance glyph at the top turns red to show which line it is coming from.
+- **Tells.** Before he strikes from a new line, his blade visibly drifts there. Then comes the windup and a red glint on the blade, and his stance glyph at the top turns red.
 
 ### The opponents
 
-- **The Ronin** circles close, reads your stance and moves to the one that beats it, sometimes strikes twice in a row, and sometimes feints.
+- **The Ronin** circles close, mirrors your line to guard it, strikes into your open line, sometimes strikes twice in a row, sometimes feints, and sometimes steps in from range.
 - **The Spearman** keeps you at the end of his spear. Thrusts are narrow, so stepping aside works. Low attacks are wide sweeps. Get too close and he shoves you off with the shaft.
 
 ## Code map

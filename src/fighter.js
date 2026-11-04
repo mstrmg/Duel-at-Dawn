@@ -1,7 +1,7 @@
 // A duelist: position, stance, breath, and the state machine shared by the player and enemies.
 import * as THREE from 'three';
 import {
-  BREATH, DODGE, IAI, STANCE_SWITCH_TIME, BLOCK_COOLDOWN, STAGGER_TIME, HITSTUN_TIME,
+  BREATH, DODGE, STEP, FEINT, IAI, STANCE_SWITCH_TIME, BLOCK_COOLDOWN, STAGGER_TIME, HITSTUN_TIME,
   ARENA_RADIUS, counters,
 } from './config.js';
 import { FighterModel, POSES, lerpPose } from './models.js';
@@ -35,7 +35,7 @@ export class Fighter {
   reset() {
     this.state = 'idle';
     this.t = 0;
-    this.stance = 1;
+    this.stance = 0;
     this.pendingStance = null;
     this.stanceTimer = 0;
     this.breath = BREATH.max;
@@ -49,6 +49,8 @@ export class Fighter {
     this.iaiCharge = 0;
     this.iaiHit = false;
     this.dodgeDir = new THREE.Vector3();
+    this.dodgeKind = 'evade';
+    this.dodgeDist = DODGE.dist;
     this.stateDuration = 0;
     this.recoverExtra = 0;
     this.deathT = 0;
@@ -71,7 +73,7 @@ export class Fighter {
   }
 
   get invulnerable() {
-    return this.state === 'dodge' && this.t >= DODGE.iStart && this.t <= DODGE.iEnd;
+    return this.state === 'dodge' && this.dodgeKind === 'evade' && this.t >= DODGE.iStart && this.t <= DODGE.iEnd;
   }
 
   // Is the guard actually up in a given stance right now?
@@ -163,13 +165,17 @@ export class Fighter {
     return true;
   }
 
+  // A feint: pull the strike back before it lands, to bait a guard or parry.
   cancelAttack() {
-    // a feint: pull the strike back
-    if (this.state !== 'windup') return;
+    if (this.state !== 'windup' || !this.attack || this.attack.kind === 'shove') return false;
+    if (this.t > this.attack.windup * FEINT.latest) return false;
     this.attack = null;
     this.setState('recover');
-    this.stateDuration = 0.22;
-    this.spend(5);
+    this.stateDuration = FEINT.recover;
+    this.spend(FEINT.cost);
+    this.feintedAt = this.game.time;
+    this.game.events.emit('feint', this);
+    return true;
   }
 
   setBlock(held) {
@@ -183,8 +189,12 @@ export class Fighter {
     const f = this.forward(tmp);
     const r = tmp2.set(-f.z, 0, f.x);
     this.dodgeDir.set(0, 0, 0).addScaledVector(f, dir.y).addScaledVector(r, dir.x).normalize();
-    this.spend(DODGE.cost);
-    this.setState('dodge', DODGE.time);
+    // forward is a committed step in; back or sideways is an evade with i-frames
+    this.dodgeKind = dir.y > 0.5 ? 'step' : 'evade';
+    const D = this.dodgeKind === 'step' ? STEP : DODGE;
+    this.dodgeDist = D.dist;
+    this.spend(D.cost);
+    this.setState('dodge', D.time);
     this.game.events.emit('dodge', this);
     return true;
   }
@@ -216,7 +226,8 @@ export class Fighter {
     const dist = opp ? this.distTo(opp) : 0;
     const lunge = Math.max(0, Math.min(lungeMax, dist - 1.15));
     this.attack = {
-      stance: 1, kind: 'iai', windup: IAI.impactAt, reach: IAI.reach, arc: 1.1,
+      // a level draw-cut: whatever line he guards, a raised guard can take a partial one
+      stance: opp ? opp.displayStance : 0, kind: 'iai', windup: IAI.impactAt, reach: IAI.reach, arc: 1.1,
       damage: full ? 3 : 1, lunge, active: IAI.strikeTime, recover: IAI.hitRecover,
       resolved: false, whiffed: false, unblockable: full, unparryable: full, iai: true,
       weaponKind: 'katana', full,
@@ -326,9 +337,16 @@ export class Fighter {
         }
         break;
       case 'dodge': {
-        const k = easeOut(this.t / DODGE.time) - easeOut((this.t - dt) / DODGE.time);
-        this.pos.addScaledVector(this.dodgeDir, DODGE.dist * k);
-        if (this.t >= DODGE.time) {
+        const T = this.stateDuration;
+        const k = easeOut(this.t / T) - easeOut((this.t - dt) / T);
+        let step = this.dodgeDist * k;
+        if (this.dodgeKind === 'step' && this.opponent) {
+          // never step through the opponent
+          const gap = this.distTo(this.opponent) - (this.def.radius + this.opponent.def.radius + 0.3);
+          step = Math.min(step, Math.max(0, gap));
+        }
+        this.pos.addScaledVector(this.dodgeDir, step);
+        if (this.t >= T) {
           if (this.gassed) this.becomeWinded();
           else this.setState('idle');
         }
@@ -403,11 +421,24 @@ export class Fighter {
     }
     this.moving = false;
     if (speedMul > 0 && this.moveInput.lengthSq() > 0.01) {
-      const f = opp ? tmp.subVectors(opp.pos, this.pos).setY(0).normalize() : this.forward(tmp);
-      const r = tmp2.set(-f.z, 0, f.x);
       const mv = this.moveInput.length() > 1 ? this.moveInput.clone().normalize() : this.moveInput;
       const speed = this.def.speed * speedMul * (mv.y < 0 ? 0.85 : 1);
-      this.pos.addScaledVector(f, mv.y * speed * dt).addScaledVector(r, mv.x * speed * dt);
+      if (opp) {
+        // footwork is relative to the opponent: sideways circles him at the same distance,
+        // forward and back close or open the gap
+        tmp.subVectors(this.pos, opp.pos).setY(0);
+        const dist = Math.max(0.5, tmp.length());
+        const theta = (mv.x * speed * dt * 0.9) / dist;
+        const c = Math.cos(theta), s = Math.sin(theta);
+        const x = tmp.x * c + tmp.z * s, z = -tmp.x * s + tmp.z * c;
+        tmp.set(x, 0, z);
+        tmp.setLength(Math.max(0.1, dist - mv.y * speed * dt));
+        this.pos.set(opp.pos.x + tmp.x, 0, opp.pos.z + tmp.z);
+      } else {
+        const f = this.forward(tmp);
+        const r = tmp2.set(-f.z, 0, f.x);
+        this.pos.addScaledVector(f, mv.y * speed * dt).addScaledVector(r, mv.x * speed * dt);
+      }
       this.moving = true;
     }
     // knockback

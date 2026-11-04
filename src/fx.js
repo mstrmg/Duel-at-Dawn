@@ -109,6 +109,16 @@ export class Effects {
     this.strokes.push({ pts, bristles, age: 0, color, width: Math.min(w, h) * 0.06 });
   }
 
+  // A splash of ink thrown out from a point on screen: the mark of a perfect parry.
+  burst(x, y, color = '#161514') {
+    const blobs = [];
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2;
+      blobs.push({ a, d: 30 + Math.random() * 120, r: 2 + Math.random() * 9, k: 0.6 + Math.random() * 0.4 });
+    }
+    this.strokes.push({ kind: 'burst', x, y, blobs, age: 0, color });
+  }
+
   update(dt, realDt) {
     for (const d of this.drops) {
       if (d.life <= 0) continue;
@@ -131,6 +141,34 @@ export class Effects {
     this.drawStrokes(realDt);
   }
 
+  drawBurst(g, s) {
+    const life = 0.9;
+    if (s.age > life) return false;
+    const t = Math.min(1, s.age / 0.12);
+    const out = 1 - Math.pow(1 - t, 3);
+    g.globalAlpha = Math.max(0, 1 - Math.max(0, s.age - 0.35) / (life - 0.35)) * 0.9;
+    g.fillStyle = s.color;
+    g.strokeStyle = s.color;
+    // a ring of ink and flung droplets with trails
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(s.x, s.y, 18 + out * 26, 0, Math.PI * 2);
+    g.stroke();
+    for (const b of s.blobs) {
+      const d = b.d * out * b.k;
+      const x = s.x + Math.cos(b.a) * d, y = s.y + Math.sin(b.a) * d;
+      g.lineWidth = b.r * 0.5;
+      g.beginPath();
+      g.moveTo(s.x + Math.cos(b.a) * d * 0.55, s.y + Math.sin(b.a) * d * 0.55);
+      g.lineTo(x, y);
+      g.stroke();
+      g.beginPath();
+      g.arc(x, y, b.r * (1 - out * 0.3), 0, Math.PI * 2);
+      g.fill();
+    }
+    return true;
+  }
+
   drawStrokes(dt) {
     const g = this.ctx;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -138,6 +176,7 @@ export class Effects {
     for (let i = this.strokes.length - 1; i >= 0; i--) {
       const s = this.strokes[i];
       s.age += dt;
+      if (s.kind === 'burst') { if (!this.drawBurst(g, s)) this.strokes.splice(i, 1); continue; }
       const drawT = Math.min(1, s.age / 0.22);
       const alpha = s.age < 1.4 ? 1 : Math.max(0, 1 - (s.age - 1.4) / 0.9);
       if (alpha <= 0) { this.strokes.splice(i, 1); continue; }

@@ -4,15 +4,16 @@ export const STANCE = { HIGH: 0, MID: 1, LOW: 2 };
 export const STANCE_NAMES = ['High', 'Mid', 'Low'];
 export const STANCE_KANJI = ['上', '中', '下'];
 
-// Stance triangle: High beats Low, Low beats Mid, Mid beats High.
-// A strike from the stance that counters the opponent's current stance winds up faster,
-// and wins a simultaneous exchange.
+// Two stances, High (0) and Low (2). Index 1 (mid) is kept only for the draw-cut's
+// level sweep. A guard covers the line of your stance, so a strike into the line
+// he is not guarding (his open line) winds up faster.
+export const STANCES = [0, 2];
 export function counters(a, b) {
-  return (a === 0 && b === 2) || (a === 2 && b === 1) || (a === 1 && b === 0);
+  return a !== b;
 }
 export function counterOf(s) {
-  // the stance that beats s
-  return s === 2 ? 0 : s === 1 ? 2 : 1;
+  // the line left open by stance s
+  return s === 0 ? 2 : 0;
 }
 
 export const PARRY_WINDOW = 0.2; // seconds after raising guard in which a matching block is a perfect parry
@@ -33,6 +34,9 @@ export const BREATH = {
 };
 
 export const DODGE = { time: 0.38, iStart: 0.02, iEnd: 0.28, dist: 3.0, cost: 20 };
+// a committed step in: closes distance fast, cheaper than an evade, but no invulnerability
+export const STEP = { time: 0.26, dist: 2.1, cost: 11 };
+export const FEINT = { cost: 8, recover: 0.15, latest: 0.8 }; // latest: fraction of the windup
 
 export const STAGGER_TIME = 1.1; // after being parried
 export const HITSTUN_TIME = 0.45;
@@ -57,7 +61,7 @@ export const PLAYER_DEF = {
   id: 'player',
   name: 'Wanderer',
   vitality: 3,
-  speed: 3.4,
+  speed: 2.8,
   radius: 0.45,
   turnRate: 14,
   weapon: {
@@ -79,7 +83,7 @@ export const RONIN_DEF = {
   name: 'The Ronin',
   title: 'a masterless blade on the spring road',
   vitality: 2,
-  speed: 2.9,
+  speed: 2.6,
   radius: 0.45,
   turnRate: 10,
   weapon: {
@@ -101,7 +105,7 @@ export const SPEARMAN_DEF = {
   name: 'The Spearman',
   title: 'keeper of the bridge, long of reach',
   vitality: 2,
-  speed: 2.5,
+  speed: 2.3,
   radius: 0.5,
   turnRate: 8,
   weapon: {

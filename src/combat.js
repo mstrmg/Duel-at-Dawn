@@ -1,6 +1,6 @@
 // Resolves a strike at the moment of impact: miss, evade, parry, block, clash or hit.
 import * as THREE from 'three';
-import { PARRY_WINDOW, CLASH_WINDOW, BLOCK_COST, counters } from './config.js';
+import { PARRY_WINDOW, CLASH_WINDOW, BLOCK_COST } from './config.js';
 
 const tmp = new THREE.Vector3();
 
@@ -64,13 +64,8 @@ export class Combat {
     if (def.state === 'windup' && def.attack && !a.iai) {
       const left = def.attack.windup - def.t;
       if (left <= CLASH_WINDOW) {
-        if (counters(def.attack.stance, a.stance)) {
-          // the defender's line wins: this blow is turned aside, theirs lands next frame
-          att.stagger(0.55);
-          ev.emit('deflect', def, att);
-          return 'deflect';
-        }
-        if (!counters(a.stance, def.attack.stance)) {
+        // blades in the same line meet; in different lines, the first to land wins
+        if (a.stance === def.attack.stance) {
           att.attack.whiffed = false;
           att.setState('recover', 0);
           att.stateDuration = 0.35;

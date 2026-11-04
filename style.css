@@ -147,3 +147,7 @@ table.controls td { padding: 2px 0; color: var(--ink-soft); }
   table.controls { font-size: 13px; }
   table.controls th { white-space: normal; }
 }
+
+/* in reach: your name gets a pen underline; when he can reach you, his does */
+.panel .name { transition: text-decoration-color 0.1s; text-decoration: underline transparent 2px; text-underline-offset: 6px; }
+.panel.in-reach .name { text-decoration-color: var(--ink); }

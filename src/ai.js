@@ -1,7 +1,7 @@
 // Enemy duelists. Each reads the player, keeps its preferred distance, and shows a clear
 // tell (pose + red glint) before every strike.
 import * as THREE from 'three';
-import { counterOf, counters } from './config.js';
+import { counterOf, counters, STANCES } from './config.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -29,16 +29,46 @@ class EnemyAI {
     this.reacting = 0;
     this.backoff = 0;
     this.lastPlayerState = player.state;
+    this.baited = 0;
+    this.seenFeint = player.feintedAt ?? 0;
   }
 
   later(delay, fn) {
     this.jobs.push({ at: this.time + delay, fn });
   }
 
+  // Start a strike. If it comes from a new stance, the blade drifts there first, so the
+  // line of the coming blow can be read before the glint.
+  commit(opts, after) {
+    const f = this.f;
+    const go = () => {
+      if (f.state !== 'idle' || !this.p.alive) return;
+      if (f.startAttack(opts)) after?.();
+    };
+    if (opts.stance !== undefined && opts.stance !== f.displayStance && !opts.quick) {
+      f.setStance(opts.stance);
+      const delay = rand(this.P.drift[0], this.P.drift[1]);
+      this.reacting = delay + 0.02;
+      this.later(delay, go);
+    } else go();
+  }
+
+  // The player pulled a strike back. If we had already moved to answer it, we bit.
+  onPlayerFeint() {
+    const f = this.f;
+    if (this.reacting <= 0 && f.state !== 'block') return;
+    this.jobs.length = 0;
+    const bait = rand(0.45, 0.7);
+    this.baited = bait;
+    this.reacting = bait;
+    this.later(bait * 0.8, () => f.setBlock(false));
+    this.game.events.emit('baited', f, this.p);
+  }
+
   // called when the player starts a strike
   onPlayerWindup() {
     const f = this.f, p = this.p, P = this.P;
-    if (f.busy || !p.attack) return;
+    if (f.busy || !p.attack || this.baited > 0) return;
     const impactIn = p.attack.windup - p.t;
     const reaction = rand(P.reaction[0], P.reaction[1]);
     const choice = weighted([
@@ -67,6 +97,11 @@ class EnemyAI {
     const f = this.f, p = this.p;
     this.time += dt;
     if (this.reacting > 0) this.reacting -= dt;
+    if (this.baited > 0) this.baited -= dt;
+    if (p.feintedAt && p.feintedAt !== this.seenFeint) {
+      this.seenFeint = p.feintedAt;
+      this.onPlayerFeint();
+    }
     for (let i = this.jobs.length - 1; i >= 0; i--) {
       if (this.jobs[i].at <= this.time) {
         const j = this.jobs.splice(i, 1)[0];
@@ -109,13 +144,13 @@ class EnemyAI {
 
   manageStance(dt) {
     this.stanceTimer -= dt;
-    // being out-lined is dangerous: shift sooner
+    // guard the line he would strike from; when it is open, shift sooner
     if (counters(this.p.displayStance, this.f.displayStance) && this.stanceTimer > this.P.outlinedShift) {
       this.stanceTimer = rand(this.P.outlinedShift * 0.4, this.P.outlinedShift);
     }
     if (this.stanceTimer > 0) return;
     this.stanceTimer = rand(this.P.stanceEvery[0], this.P.stanceEvery[1]);
-    const s = Math.random() < this.P.readStance ? counterOf(this.p.displayStance) : Math.floor(Math.random() * 3);
+    const s = Math.random() < this.P.readStance ? this.p.displayStance : pick(STANCES);
     this.f.setStance(s);
   }
 }
@@ -129,6 +164,7 @@ export class RoninAI extends EnemyAI {
       strafe: 0.55,
       stanceEvery: [0.9, 2.2],
       readStance: 0.55,
+      drift: [0.24, 0.34],
       outlinedShift: 0.7,
     });
   }
@@ -157,6 +193,10 @@ export class RoninAI extends EnemyAI {
       f.moveInput.set(this.strafeDir * 0.6, -0.8);
       return;
     }
+    if (d > 4.2 && f.breath > 55 && Math.random() < dt * 0.8) {
+      f.dodge(new THREE.Vector2(0, 1)); // a quick step in to close the gap
+      return;
+    }
     if (this.attackCooldown <= 0 && d < f.weapon.reach + 1.5) {
       this.strike(false);
       this.attackCooldown = rand(0.9, 2.0);
@@ -170,19 +210,17 @@ export class RoninAI extends EnemyAI {
     const s = weighted([
       [counterOf(p.displayStance), 0.5],
       [f.displayStance, 0.25],
-      [Math.floor(Math.random() * 3), 0.25],
+      [pick(STANCES), 0.25],
     ]);
     let followUp = null;
     if (!quick && Math.random() < 0.3) {
-      const others = [0, 1, 2].filter((x) => x !== s);
-      followUp = { stance: pick(others), windup: 0.42, lunge: 0.6 };
+      followUp = { stance: counterOf(s), windup: 0.42, lunge: 0.6 };
     }
-    const ok = f.startAttack({ stance: s, windup: quick ? 0.45 : undefined, followUp });
-    if (ok && !quick && !followUp && Math.random() < 0.1) {
+    const feint = !quick && !followUp && Math.random() < 0.12;
+    this.commit({ stance: s, windup: quick ? 0.45 : undefined, followUp, quick }, () => {
       // feint: pull the strike before it lands
-      const at = f.attack.windup * rand(0.45, 0.6);
-      this.later(at, () => f.cancelAttack());
-    }
+      if (feint) this.later(f.attack.windup * rand(0.45, 0.6), () => f.cancelAttack());
+    });
   }
 }
 
@@ -195,6 +233,7 @@ export class SpearmanAI extends EnemyAI {
       strafe: 0.4,
       stanceEvery: [1.6, 3.0],
       readStance: 0.35,
+      drift: [0.3, 0.42],
       outlinedShift: 1.4,
     });
     this.shoveCooldown = 0;
@@ -211,7 +250,7 @@ export class SpearmanAI extends EnemyAI {
     // too close for a spear: shove them off or step back
     if (d < 2.0) {
       if (this.shoveCooldown <= 0 && f.breath > 10 && Math.random() < 0.6) {
-        f.startAttack({ stance: 1, kind: 'shove', windup: 0.36, lunge: 0 });
+        f.startAttack({ stance: p.displayStance, kind: 'shove', windup: 0.36, lunge: 0 });
         this.shoveCooldown = rand(1.2, 2.2);
         return;
       }
@@ -224,7 +263,7 @@ export class SpearmanAI extends EnemyAI {
     }
 
     if (p.vulnerable && d < f.weapon.reach + 0.6 && f.breath > 18) {
-      f.startAttack({ stance: 1, windup: 0.5 });
+      f.startAttack({ stance: 0, windup: 0.5 });
       return;
     }
     // a charging draw-cut: poke it from out of its reach
@@ -236,8 +275,8 @@ export class SpearmanAI extends EnemyAI {
       return;
     }
     if (this.attackCooldown <= 0 && d > 2.4 && d < f.weapon.reach + 0.5) {
-      const s = weighted([[1, 0.5], [0, 0.2], [2, 0.3]]);
-      f.startAttack({ stance: s });
+      const s = weighted([[0, 0.5], [2, 0.5]]); // high thrust or low sweep
+      this.commit({ stance: s });
       this.attackCooldown = rand(1.3, 2.6);
       return;
     }

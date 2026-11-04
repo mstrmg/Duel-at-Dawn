@@ -1,5 +1,5 @@
 // DOM overlay: vitality, breath, stances, callouts, and the title/result screens.
-import { STANCE_KANJI, STANCE_NAMES, BREATH, IAI } from './config.js';
+import { STANCE_KANJI, STANCE_NAMES, STANCES, BREATH, IAI } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -21,7 +21,7 @@ export class Hud {
       <div class="name"></div>
       <div class="pips"></div>
       <div class="breath"><div class="fill"></div></div>
-      <div class="stances">${STANCE_KANJI.map((k, i) => `<span data-s="${i}" title="${STANCE_NAMES[i]}">${k}</span>`).join('')}</div>
+      <div class="stances">${STANCES.map((i) => `<span data-s="${i}" title="${STANCE_NAMES[i]}">${STANCE_KANJI[i]}</span>`).join('')}</div>
       ${id === 'player-panel' ? '<div class="iai"><div class="fill"></div></div>' : ''}
     `;
   }
@@ -47,7 +47,8 @@ export class Hud {
     p.querySelector('.breath').classList.toggle('winded', f.state === 'winded');
     p.querySelector('.breath').classList.toggle('low', f.breath < 25);
     const telling = isEnemy && f.state === 'windup' && f.attack && f.attack.kind !== 'shove';
-    p.querySelectorAll('.stances span').forEach((s, i) => {
+    p.querySelectorAll('.stances span').forEach((s) => {
+      const i = Number(s.dataset.s);
       const cur = f.state.startsWith('iai') ? -1 : telling ? f.attack.stance : f.displayStance;
       s.classList.toggle('on', i === cur);
       s.classList.toggle('pending', f.pendingStance === i);
@@ -61,6 +62,11 @@ export class Hud {
       iai.classList.toggle('full', f.iaiCharge >= IAI.fullCharge);
       iai.querySelector('.fill').style.width = `${f.iaiCharge * 100}%`;
     }
+  }
+
+  setInReach(mine, his) {
+    document.getElementById('player-panel').classList.toggle('in-reach', mine);
+    document.getElementById('enemy-panel').classList.toggle('in-reach', his);
   }
 
   say(text, kind = '', time = 0.9) {
