@@ -44,7 +44,7 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 ### The opponents
 
 - **The Ronin** circles close, mirrors your line to guard it, strikes into your open line, sometimes strikes twice in a row, sometimes feints, and sometimes steps in from range. He answers every strike, drops his own windup into guard if you beat him to the punch, strikes back right after he blocks or evades you (a blocked lunge always gets punished), and parries more the more you press. He won't swing at you while you back away.
-- **The Spearman** keeps you at the end of his spear. Thrusts are narrow, so stepping aside works. Low attacks are wide sweeps. Get too close and he shoves you off with the shaft.
+- **The Spearman** keeps you at the end of his spear and gives ground when you get inside it. Walk straight in and he meets you with a quick stop-thrust. Circle him and he answers with a wide low sweep. Lunge at him and he puts the spearhead in the way (in your line the blades clash, in the other line his reach lands first). Get too close and he shoves you off with the shaft. His thrusts are narrow and his recovery is long, so the way in is to bait a thrust, slip it, then close. He shares the Ronin's answers to mashing.
 
 ## Code map
 

@@ -366,6 +366,12 @@ class Game {
       } else hud.say('He is winded', 'good');
     });
     ev.on('dodge', () => snd.step());
+    ev.on('meet', () => {
+      if (!this.hintsShown.has('meet')) {
+        this.hintsShown.add('meet');
+        hud.hint('Lunging at a spear runs you onto it. Bait his thrust, slip it, then close.', 2.5);
+      }
+    });
     ev.on('feint', (f) => {
       snd.whoosh();
       if (!isP(f)) hud.hint('A feint.', 0.8);

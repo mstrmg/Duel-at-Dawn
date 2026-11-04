@@ -300,29 +300,56 @@ export class RoninAI extends EnemyAI {
   }
 }
 
+// The Spearman fights at the end of his reach. Walking straight in meets a stop-thrust,
+// circling him meets a wide low sweep, lunging at him meets the spearhead, and up
+// close he shoves you back out. The way in is to bait a thrust, slip it, then close.
 export class SpearmanAI extends EnemyAI {
   constructor(fighter, player, game) {
     super(fighter, player, game, {
       reaction: [0.1, 0.17],
-      parry: 0.1, block: 0.46, dodge: 0.28, none: 0.16,
+      parry: 0.1, block: 0.52, dodge: 0.3, none: 0.08,
       dodgeBack: true,
       readMove: 0.6,
       adapt: 0.22,
       guardCancel: 0.5,
       riposte: 0.5, riposteWindup: 0.6,
       hitGuard: 0.6,
-      dodgeWhenLate: 0.45,
+      dodgeWhenLate: 0.7,
       strafe: 0.4,
       stanceEvery: [1.6, 3.0],
-      readStance: 0.35,
+      readStance: 0.6,
       drift: [0.3, 0.42],
       outlinedShift: 1.4,
+      meetLunge: 0.6, // chance to answer a lunge with the spearhead
+      stopThrust: 2.2, // per second, while you walk into his reach
+      keep: 2.7, // inside this he gives ground
     });
     this.shoveCooldown = 0;
   }
 
+  // A lunge from range runs onto the spear.
+  onPlayerWindup() {
+    const f = this.f, p = this.p, P = this.P;
+    const a = p.attack;
+    if (a && a.move === 'lunge' && !f.busy && f.state !== 'block' && this.baited <= 0 &&
+        f.distTo(p) > 2.3 && f.breath > 15 && Math.random() < P.meetLunge) {
+      const impactIn = a.windup - p.t;
+      const windup = THREE.MathUtils.clamp(impactIn - 0.1, 0.15, 0.45);
+      this.handled = a;
+      this.jobs.length = 0;
+      // thrust from the line he already holds (no time to change it): in your line the
+      // blades meet and clash, in the other line his longer reach lands first
+      if (f.pendingStance !== null) { f.stance = f.pendingStance; f.pendingStance = null; }
+      if (f.startAttack({ stance: f.stance, kind: 'thrust', windup, lunge: 0 })) {
+        this.game.events.emit('meet', f, p);
+        return;
+      }
+    }
+    super.onPlayerWindup();
+  }
+
   think(dt) {
-    const f = this.f, p = this.p;
+    const f = this.f, p = this.p, P = this.P;
     const d = f.distTo(p);
     f.setBlock(false);
     this.manageStance(dt);
@@ -356,12 +383,27 @@ export class SpearmanAI extends EnemyAI {
       f.moveInput.set(this.strafeDir * 0.4, -0.6);
       return;
     }
-    if (this.attackCooldown <= 0 && d > 2.4 && d < f.weapon.reach + 0.5) {
-      const s = weighted([[0, 0.5], [2, 0.5]]); // high thrust or low sweep
-      this.commit({ stance: s });
-      this.attackCooldown = rand(1.3, 2.6);
+    const walkingIn = !p.busy && p.moveInput.y > 0.5 && Math.abs(p.moveInput.x) < 0.5;
+    const circling = !p.busy && Math.abs(p.moveInput.x) > 0.5;
+    const inBand = d > 2.3 && d < f.weapon.reach + 0.6;
+    // walking straight into his reach meets a quick stop-thrust
+    if (walkingIn && inBand && this.attackCooldown < 0.8 && Math.random() < dt * P.stopThrust) {
+      f.startAttack({ stance: 0, kind: 'thrust', windup: 0.52, lunge: 0.2 });
+      this.attackCooldown = rand(1.1, 2.0);
       return;
     }
-    this.strafe(dt, 3.3);
+    if (this.attackCooldown <= 0 && inBand) {
+      // circling him draws the wide low sweep; otherwise a high thrust or a sweep
+      const s = circling ? 2 : weighted([[0, 0.6], [2, 0.4]]);
+      this.commit({ stance: s });
+      this.attackCooldown = rand(1.2, 2.4);
+      return;
+    }
+    // give ground to keep you at the spearhead
+    if (d < P.keep) {
+      f.moveInput.set(this.strafeDir * 0.35, -0.9);
+      return;
+    }
+    this.strafe(dt, 3.2);
   }
 }
