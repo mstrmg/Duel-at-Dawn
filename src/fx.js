@@ -1,7 +1,7 @@
 // Visual effects: red ink blood, ground stains, sparks, and the killing-blow brush stroke.
 import * as THREE from 'three';
 import { COLORS } from './config.js';
-import { flat, noEdges } from './ink.js';
+import { flat } from './ink.js';
 
 export class Effects {
   constructor(scene) {
@@ -24,7 +24,6 @@ export class Effects {
       m.visible = false;
       scene.add(m);
       this.sparks.push({ m, v: new THREE.Vector3(), life: 0 });
-      noEdges.add(m);
     }
     this.stainGeo = new THREE.CircleGeometry(1, 12);
 
