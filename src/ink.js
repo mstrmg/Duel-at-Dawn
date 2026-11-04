@@ -6,7 +6,7 @@ import { COLORS, ARENA_RADIUS } from './config.js';
 // Work directly in the hex colors we author: no linear/sRGB conversions anywhere.
 THREE.ColorManagement.enabled = false;
 
-const LIGHT_DIR = new THREE.Vector3(-0.45, 0.8, 0.35).normalize();
+export const LIGHT_DIR = new THREE.Vector3(-0.45, 0.8, 0.35).normalize();
 const paper = new THREE.Color(COLORS.paper);
 const inkColor = new THREE.Color(COLORS.ink);
 
@@ -15,16 +15,43 @@ function luminance(hex) {
   return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
 }
 
+// Cutaway: anything between the camera and the player (tree crowns, roofs) is stippled
+// away around the player, so the view is never blocked. Off unless setCutaway() is used.
+export const CUT = { uCutOn: { value: 0 }, uCutPos: { value: new THREE.Vector3() } };
+const cutGlsl = /* glsl */ `
+  uniform float uCutOn;
+  uniform vec3 uCutPos;
+  varying vec3 vW;
+  void cutaway() {
+    // only above knee height, so the ground (which never cuts) stays whole in both passes
+    if (uCutOn < 0.5 || vW.y < uCutPos.y - 0.8) return;
+    vec3 toP = uCutPos - cameraPosition;
+    float lp = length(toP);
+    vec3 dir = toP / lp;
+    vec3 toF = vW - cameraPosition;
+    float along = dot(toF, dir);
+    if (along > lp - 0.8) return;
+    float perp = length(toF - dir * along);
+    float rad = 0.6 + 1.6 * clamp(along / lp, 0.0, 1.0);
+    // a clean hole: the edge pass then rings it with one ink line, like a drawn vignette
+    if (perp < rad) discard;
+  }`;
+
 const hatchVert = /* glsl */ `
   #include <common>
   #include <fog_pars_vertex>
   varying vec3 vN;
+  varying vec3 vW;
   void main() {
     vec4 wp = modelMatrix * vec4(position, 1.0);
     #ifdef USE_INSTANCING
       wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
     #endif
+    vW = wp.xyz;
     vN = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    #ifdef USE_INSTANCING
+      vN = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
+    #endif
     vec4 mvPosition = viewMatrix * wp;
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
@@ -40,7 +67,9 @@ const hatchFrag = /* glsl */ `
   uniform vec3 uLight;
   uniform float uPx;
   uniform float uDensity;
+  uniform float uFill;
   varying vec3 vN;
+  ${cutGlsl}
 
   // one family of parallel pen lines; strength grows with darkness past 'start'
   float hatch(float c, float spacing, float d, float start) {
@@ -53,6 +82,7 @@ const hatchFrag = /* glsl */ `
   }
 
   void main() {
+    cutaway();
     vec3 n = normalize(vN);
     if (!gl_FrontFacing) n = -n;
     float ndl = max(dot(n, uLight), 0.0);
@@ -71,7 +101,7 @@ const hatchFrag = /* glsl */ `
     ink = max(ink, hatch(p.y + wob * 0.6, s * 0.8, dark, 0.72));
     ink = max(ink, smoothstep(0.88, 0.98, dark));
 
-    vec3 base = mix(uPaper, uTint, 0.16);
+    vec3 base = mix(uPaper, uTint, uFill);
     gl_FragColor = vec4(mix(base, uInk, ink), 1.0);
     #include <fog_fragment>
   }`;
@@ -81,8 +111,12 @@ export const noEdges = new Set();
 
 const hatchCache = new Map();
 // A hatched pen material. tone: 0 = solid ink, 1 = bare paper.
-export function hatch(tone, tint = COLORS.paper, density = 1) {
-  const key = `${tone.toFixed(3)}|${tint}|${density}`;
+// opts.fill: how strongly the tint colors the paper (0.16 = a faint wash; ~0.9 = a full
+// colored fill, used for Spring's pink blossoms). opts.ink: the hatch line color.
+export function hatch(tone, tint = COLORS.paper, density = 1, opts = {}) {
+  const fill = opts.fill ?? 0.16;
+  const ink = opts.ink ?? COLORS.ink;
+  const key = `${tone.toFixed(3)}|${tint}|${density}|${fill}|${ink}`;
   if (hatchCache.has(key)) return hatchCache.get(key);
   const m = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
@@ -91,10 +125,11 @@ export function hatch(tone, tint = COLORS.paper, density = 1) {
         uTone: { value: tone },
         uTint: { value: new THREE.Color(tint) },
         uPaper: { value: paper.clone() },
-        uInk: { value: inkColor.clone() },
+        uInk: { value: new THREE.Color(ink) },
         uLight: { value: LIGHT_DIR.clone() },
         uPx: { value: Math.min(devicePixelRatio, 2) },
         uDensity: { value: density },
+        uFill: { value: fill },
       },
     ]),
     vertexShader: hatchVert,
@@ -102,6 +137,7 @@ export function hatch(tone, tint = COLORS.paper, density = 1) {
     fog: true,
     side: THREE.DoubleSide,
   });
+  Object.assign(m.uniforms, CUT); // shared, so one update moves every material's cutaway
   hatchCache.set(key, m);
   return m;
 }
@@ -125,6 +161,29 @@ export function inked(geometry, color) {
 }
 
 // ---------- the pen post pass ----------
+
+// view-space normals for the edge pass (as MeshNormalMaterial), honoring the cutaway
+const normalVert = /* glsl */ `
+  varying vec3 vVN;
+  varying vec3 vW;
+  void main() {
+    mat4 m = modelMatrix;
+    #ifdef USE_INSTANCING
+      m = modelMatrix * instanceMatrix;
+    #endif
+    vec4 wp = m * vec4(position, 1.0);
+    vW = wp.xyz;
+    vVN = normalize((viewMatrix * vec4(normalize((m * vec4(normal, 0.0)).xyz), 0.0)).xyz);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }`;
+const normalFrag = /* glsl */ `
+  varying vec3 vVN;
+  ${cutGlsl}
+  void main() {
+    cutaway();
+    vec3 n = normalize(vVN) * (gl_FrontFacing ? 1.0 : -1.0);
+    gl_FragColor = vec4(n * 0.5 + 0.5, 1.0);
+  }`;
 
 const penVert = /* glsl */ `
   varying vec2 vUv;
@@ -196,7 +255,12 @@ export class PenRenderer {
     this.colorRT = new THREE.WebGLRenderTarget(1, 1);
     this.colorRT.depthTexture = new THREE.DepthTexture(1, 1);
     this.normalRT = new THREE.WebGLRenderTarget(1, 1);
-    this.normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+    this.normalMat = new THREE.ShaderMaterial({
+      uniforms: { ...CUT },
+      vertexShader: normalVert,
+      fragmentShader: normalFrag,
+      side: THREE.DoubleSide,
+    });
     this.quad = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 2),
       new THREE.ShaderMaterial({
@@ -234,6 +298,12 @@ export class PenRenderer {
     this.quad.material.uniforms.uLine.value = Math.max(1.4, dpr * 1.3);
   }
 
+  // world position to keep clear (the player's chest), or null to turn the cutaway off
+  setCutaway(pos) {
+    CUT.uCutOn.value = pos ? 1 : 0;
+    if (pos) CUT.uCutPos.value.copy(pos);
+  }
+
   render(time) {
     const r = this.renderer;
     r.setRenderTarget(this.colorRT);
@@ -261,13 +331,13 @@ export class PenRenderer {
 
 // ---------- the dawn clearing ----------
 
-function facet(g) {
+export function facet(g) {
   g = g.toNonIndexed();
   g.computeVertexNormals();
   return g;
 }
 
-function seeded(seed) {
+export function seeded(seed) {
   let s = seed >>> 0;
   return () => {
     s = (s * 1664525 + 1013904223) >>> 0;

@@ -28,14 +28,14 @@ A 3D third-person samurai dueling roguelike in an ink wash style, drawn like pen
 - Meta-progression: on death the sword passes to a new wanderer (lineage), gaining a permanent trait; a home dojo unlocks techniques, swords, and characters between runs.
 
 ## Art & feel
-A pen and ink look: black ink on paper tones, hatched shading, hand-drawn ink outlines that wobble slightly, lots of empty space and mist, red as the only accent color. Rendering is custom (hatch shader plus an edge-detected ink line pass), not realistic lighting. Fighters are detailed figures (kimono, hakama, hats, armor) built from primitives. Minimal sound: wind, footsteps, blade rings. Killing blows slow time with a red brush stroke.
+A pen and ink look: black ink on paper tones, hatched shading, hand-drawn ink outlines that wobble slightly, lots of empty space and mist, red as the main accent color. Each season may add one accent of its own: Spring's is pink (cherry blossoms, azaleas, wildflowers, falling petals), so the vegetation pops against the ink. Rendering is custom (hatch shader plus an edge-detected ink line pass), not realistic lighting. Fighters are detailed figures (kimono, hakama, hats, armor) built from primitives. Minimal sound: wind, footsteps, blade rings. Killing blows slow time with a red brush stroke.
 
 ## Current plan (build in this order)
 1. ~~Combat prototype: one player, one sword, two enemies (Ronin, Spearman).~~ Done: see README.md for controls and the code map. All tuning numbers live in `src/config.js` and `src/ai.js`.
-2. One region (Spring) with 5–6 map stops, a few techniques, and the Petal Blade boss.
+2. One region (Spring) with 5–6 map stops, a few techniques, and the Petal Blade boss. In progress: the walkable Spring map is built (`spring.html`, `src/spring/`), separate from combat for now.
 3. Wounds and upgrades.
 4. Later: other regions, lineage, honor, unlockable characters.
 
 ## Working notes
-- `npm run dev` to play locally; `npm run build:single` writes one self-contained `dist/duel-at-dawn.html` (the playable artifact is published from it).
+- `npm run dev` to play locally (`/` is combat, `/spring.html` is the Spring map); `npm run build:single` writes self-contained `dist/duel-at-dawn.html` and `dist/spring-map.html` (each published as its own artifact).
 - Ideas tried and dropped: choosing stance with the mouse, and a sword that follows the mouse with physics.

@@ -13,6 +13,17 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 `npm run build` writes a static build to `dist/` that runs from any static host. `npm run build:single` bundles everything into one self-contained `dist/duel-at-dawn.html` you can open or publish directly.
 
+## The Spring map
+
+`spring.html` is a walkable Spring valley, separate from combat for now (open `/spring.html` under `npm run dev`). A dirt road runs north from the south gate past the crossroads, with the inn to the west and the lookout to the east, over a plank bridge, and up an avenue of stone lanterns to the shrine and its red torii. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
+
+WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock it, or drag), the arrow keys turn the camera, and the wheel sets its distance. Trees and buildings between the camera and the wanderer are cut away around him.
+
+- `src/spring/terrain.js`: the height field, roads and stream (baked into one mask texture) and the ground shader
+- `src/spring/world.js`: trees, azaleas, wildflowers, rocks, fences, lanterns, bridge, inn, shrine and torii, merged per material; colliders
+- `src/spring/grass.js`: instanced ink grass that sways and thins with distance
+- `src/spring/main.js`: walking, collisions, the shoulder camera and place names
+
 ## Controls
 
 | Input | Action |
@@ -54,5 +65,5 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 - `src/ai.js`: Ronin and Spearman behaviour
 - `src/player.js`: input mapping
 - `src/models.js`: the fighters (kimono, hakama, hats, armor, two-bone arms) and stance poses
-- `src/ink.js`: pen-and-ink rendering (hatched shading, edge-detected ink lines that wobble like hand-drawn frames) and the dawn clearing
+- `src/ink.js`: pen-and-ink rendering (hatched shading with optional colored fills, edge-detected ink lines that wobble like hand-drawn frames, the camera cutaway) and the dawn clearing
 - `src/fx.js`, `src/audio.js`, `src/hud.js`: blood and brush strokes, synthesized sound, the HUD
