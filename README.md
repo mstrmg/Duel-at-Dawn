@@ -11,7 +11,7 @@ npm install
 npm run dev      # then open the URL it prints (http://localhost:5173)
 ```
 
-`npm run build` writes a static build to `dist/` that runs from any static host.
+`npm run build` writes a static build to `dist/` that runs from any static host. `npm run build:single` bundles everything into one self-contained `dist/duel-at-dawn.html` you can open or publish directly.
 
 ## Controls
 
