@@ -47,6 +47,6 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 - `src/combat.js`: what happens when a blow lands (miss, evade, parry, block, clash, hit)
 - `src/ai.js`: Ronin and Spearman behaviour
 - `src/player.js`: input mapping
-- `src/models.js`: placeholder models and stance poses
-- `src/ink.js`: toon shading, outlines, the dawn clearing
+- `src/models.js`: the fighters (kimono, hakama, hats, armor, two-bone arms) and stance poses
+- `src/ink.js`: pen-and-ink rendering (hatched shading, edge-detected ink lines that wobble like hand-drawn frames) and the dawn clearing
 - `src/fx.js`, `src/audio.js`, `src/hud.js`: blood and brush strokes, synthesized sound, the HUD

@@ -1,6 +1,6 @@
-// Placeholder fighter models built from primitives, plus the weapon poses for each stance.
+// Fighter models built from primitives in a pen-and-ink style, plus the weapon poses for each stance.
 import * as THREE from 'three';
-import { inked, toon, flat } from './ink.js';
+import { hatch, flat, noEdges } from "./ink.js";
 import { COLORS } from './config.js';
 
 const D = THREE.MathUtils.degToRad;
@@ -56,20 +56,108 @@ export const POSES = {
 
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
+const tmpC = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
+const tmpPole = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
-function limb(color, radius) {
-  const g = new THREE.CylinderGeometry(radius, radius * 0.85, 1, 7);
-  return inked(g, color, 0.02);
+// ---------- geometry helpers ----------
+
+function mesh(geo, tone, parent, pos, rot, scale) {
+  const m = new THREE.Mesh(geo, typeof tone === 'number' ? hatch(tone) : tone);
+  if (pos) m.position.set(...pos);
+  if (rot) m.rotation.set(...rot);
+  if (scale) m.scale.set(...scale);
+  parent?.add(m);
+  return m;
 }
 
-function placeLimb(mesh, from, to) {
+// Lathe from [radius, height] pairs. faceted=true gives flat facets, which the pen
+// pass draws as pleats and seams.
+function lathe(points, segments, faceted = false) {
+  let g = new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), segments);
+  if (faceted) {
+    g = g.toNonIndexed();
+    g.computeVertexNormals();
+  }
+  return g;
+}
+
+function facet(g) {
+  g = g.toNonIndexed();
+  g.computeVertexNormals();
+  return g;
+}
+
+function placeLimb(m, from, to) {
   tmpDir.subVectors(to, from);
   const len = tmpDir.length();
-  mesh.position.addVectors(from, to).multiplyScalar(0.5);
-  mesh.scale.set(1, Math.max(0.01, len), 1);
-  mesh.quaternion.setFromUnitVectors(UP, tmpDir.normalize());
+  m.position.addVectors(from, to).multiplyScalar(0.5);
+  m.scale.set(1, Math.max(0.01, len), 1);
+  m.quaternion.setFromUnitVectors(UP, tmpDir.normalize());
+}
+
+// Two-bone arm: shoulder to hand, elbow bent toward the pole direction.
+function solveElbow(shoulder, hand, l1, l2, pole, out) {
+  tmpDir.subVectors(hand, shoulder);
+  let d = tmpDir.length();
+  const reach = l1 + l2;
+  let s1 = l1;
+  if (d >= reach * 0.999) {
+    // stretch slightly rather than leave a gap at the grip
+    s1 = l1 * (d / reach);
+    return out.copy(shoulder).addScaledVector(tmpDir.normalize(), s1);
+  }
+  d = Math.max(d, 0.001);
+  tmpDir.divideScalar(d);
+  const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+  const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+  tmpPole.copy(pole).addScaledVector(tmpDir, -pole.dot(tmpDir)).normalize();
+  return out.copy(shoulder).addScaledVector(tmpDir, a).addScaledVector(tmpPole, h);
+}
+
+function katanaBlade() {
+  // a curved blade drawn in 2D: x runs along the blade, y is the edge-to-spine width
+  const shape = new THREE.Shape();
+  const N = 12;
+  const L = 0.98;
+  const curve = (x) => 0.045 * (x / L) ** 2;
+  const width = (x) => 0.017 * (1 - 0.35 * (x / L));
+  shape.moveTo(0, -width(0));
+  for (let i = 1; i <= N; i++) {
+    const x = (i / N) * (L - 0.06);
+    shape.lineTo(x, curve(x) - width(x));
+  }
+  shape.lineTo(L, curve(L) + 0.004); // kissaki
+  for (let i = N; i >= 0; i--) {
+    const x = (i / N) * (L - 0.06);
+    shape.lineTo(x, curve(x) + width(x));
+  }
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 0.007, bevelEnabled: false });
+  g.translate(0, 0, -0.0035);
+  g.rotateY(-Math.PI / 2);
+  g.translate(0, 0, 0.12);
+  return g;
+}
+
+function buildKatana() {
+  const g = new THREE.Group();
+  mesh(katanaBlade(), 0.97, g);
+  mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.014, 12), 0.12, g, [0, 0, 0.11], [Math.PI / 2, 0, 0]);
+  mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.03, 8), 0.6, g, [0, 0, 0.127], [Math.PI / 2, 0, 0]); // habaki
+  mesh(facet(new THREE.CylinderGeometry(0.019, 0.017, 0.26, 6, 4)), 0.25, g, [0, 0, -0.03], [Math.PI / 2, 0, 0]);
+  mesh(new THREE.SphereGeometry(0.02, 8, 6), 0.1, g, [0, 0, -0.165]); // kashira
+  return { group: g, tip: new THREE.Vector3(0, 0.05, 1.1), length: 1.1 };
+}
+
+function buildYari() {
+  const g = new THREE.Group();
+  mesh(new THREE.CylinderGeometry(0.02, 0.024, 2.6, 7), 0.35, g, [0, 0, 0.35], [Math.PI / 2, 0, 0]);
+  const head = mesh(facet(new THREE.OctahedronGeometry(0.05, 0)), 0.95, g, [0, 0, 1.86]);
+  head.scale.set(0.5, 0.25, 4.2);
+  mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.1, 8), 0.1, g, [0, 0, 1.62], [Math.PI / 2, 0, 0]);
+  mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.05, 8), 0.1, g, [0, 0, -0.93], [Math.PI / 2, 0, 0]); // butt cap
+  return { group: g, tip: new THREE.Vector3(0, 0, 2.06), length: 2.06 };
 }
 
 function glintTexture() {
@@ -78,7 +166,6 @@ function glintTexture() {
   const g = c.getContext('2d');
   g.translate(64, 64);
   g.fillStyle = '#b3171d';
-  // four-pointed ink star
   for (let i = 0; i < 4; i++) {
     g.save();
     g.rotate((i * Math.PI) / 2);
@@ -92,46 +179,42 @@ function glintTexture() {
   g.beginPath();
   g.arc(0, 0, 9, 0, Math.PI * 2);
   g.fill();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  return new THREE.CanvasTexture(c);
 }
 let glintTex = null;
 
-function buildKatana() {
-  const g = new THREE.Group();
-  const blade = inked(new THREE.BoxGeometry(0.035, 0.012, 1.0), 0xe8e4da, 0.012);
-  blade.position.z = 0.62;
-  // a slight curve: tip tilts up
-  blade.rotation.x = -0.04;
-  const guard = inked(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 10), COLORS.ink, 0.008);
-  guard.rotation.x = Math.PI / 2;
-  guard.position.z = 0.1;
-  const hilt = inked(new THREE.BoxGeometry(0.035, 0.035, 0.26), 0x2a2622, 0.01);
-  hilt.position.z = -0.02;
-  g.add(blade, guard, hilt);
-  return { group: g, tip: new THREE.Vector3(0, 0.04, 1.12), length: 1.12 };
+function bannerTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ece5d3';
+  g.fillRect(0, 0, 128, 256);
+  g.strokeStyle = '#161514';
+  g.lineWidth = 5;
+  g.strokeRect(3, 3, 122, 250);
+  // a brushed ensō crest
+  g.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    g.lineWidth = 14 - i;
+    g.beginPath();
+    g.arc(64 + i * 0.4, 100, 34 + i * 0.3, -0.3 + i * 0.02, Math.PI * 1.75 - i * 0.05);
+    g.stroke();
+  }
+  g.font = 'bold 54px serif';
+  g.fillStyle = '#161514';
+  g.textAlign = 'center';
+  g.fillText('槍', 64, 210);
+  return new THREE.CanvasTexture(c);
 }
 
-function buildYari() {
-  const g = new THREE.Group();
-  const shaft = inked(new THREE.CylinderGeometry(0.022, 0.026, 2.6, 6), 0x3b2f26, 0.01);
-  shaft.rotation.x = Math.PI / 2;
-  shaft.position.z = 0.35;
-  const head = inked(new THREE.ConeGeometry(0.045, 0.38, 4), 0xe8e4da, 0.012);
-  head.rotation.x = Math.PI / 2;
-  head.position.z = 1.84;
-  const collar = inked(new THREE.CylinderGeometry(0.035, 0.035, 0.08, 6), COLORS.ink, 0.008);
-  collar.rotation.x = Math.PI / 2;
-  collar.position.z = 1.63;
-  g.add(shaft, head, collar);
-  return { group: g, tip: new THREE.Vector3(0, 0, 2.03), length: 2.03 };
-}
+// ---------- the fighters ----------
 
+// tones: 0 is solid ink, 1 is bare paper
 const LOOKS = {
-  player: { robe: 0x2b2a28, hakama: 0x1e1d1c, sash: 0x4b4741, hat: null, topknot: true },
-  ronin: { robe: 0x5e5b55, hakama: 0x3f3d3a, sash: 0x2a2826, hat: 'kasa', topknot: false },
-  spearman: { robe: 0x7a766c, hakama: 0x4a4740, sash: 0x2a2826, hat: 'jingasa', armor: true },
+  player: { kimono: 0.3, hakama: 0.2, obi: 0.1, collar: 0.97, hair: 0.04, hat: null, sleeve: 0.28, forearm: 0.9 },
+  ronin: { kimono: 0.66, hakama: 0.46, obi: 0.25, collar: 0.95, hair: 0.1, hat: 'kasa', sleeve: 0.6, forearm: 0.9, mantle: 0.42 },
+  spearman: { kimono: 0.74, hakama: 0.55, obi: 0.3, collar: 0.95, hair: 0.05, hat: 'jingasa', sleeve: 0.7, forearm: 0.22, armor: 0.26 },
 };
 
 export class FighterModel {
@@ -141,58 +224,94 @@ export class FighterModel {
     this.root.rotation.order = 'YXZ';
     this.body = new THREE.Group(); // leans and crouches
     this.root.add(this.body);
+    const B = this.body;
 
-    // legs / hakama: a wide skirt
-    const hakama = inked(new THREE.CylinderGeometry(0.24, 0.42, 0.85, 10), L.hakama, 0.03);
-    hakama.position.y = 0.43;
-    this.root.add(hakama);
-    this.hakama = hakama;
+    // feet in white tabi, peeking from under the hakama
+    const footGeo = new THREE.BoxGeometry(0.09, 0.06, 0.22);
+    this.feet = [mesh(footGeo, 0.92, this.root, [0.12, 0.03, 0.05]), mesh(footGeo, 0.92, this.root, [-0.12, 0.03, 0.05])];
 
-    const torso = inked(new THREE.CylinderGeometry(0.26, 0.22, 0.65, 10), L.robe, 0.03);
-    torso.position.y = 1.18;
-    const sash = inked(new THREE.CylinderGeometry(0.235, 0.235, 0.1, 10), L.sash, 0.015);
-    sash.position.y = 0.88;
-    this.body.add(torso, sash);
-    if (L.armor) {
-      const plate = inked(new THREE.BoxGeometry(0.5, 0.42, 0.32), 0x3a3733, 0.02);
-      plate.position.set(0, 1.22, 0.04);
-      this.body.add(plate);
+    // hakama: wide pleated trousers; the facets read as pleats
+    this.hakama = mesh(
+      lathe([[0.001, 0.0], [0.47, 0.0], [0.46, 0.12], [0.4, 0.45], [0.31, 0.78], [0.25, 0.97], [0.001, 0.98]], 14, true),
+      L.hakama, this.root
+    );
+    this.hakama.scale.z = 0.82;
+
+    // kimono upper body
+    const torso = mesh(
+      lathe([[0.001, 0.88], [0.24, 0.88], [0.255, 1.08], [0.275, 1.3], [0.27, 1.4], [0.2, 1.49], [0.08, 1.54], [0.001, 1.55]], 16),
+      L.kimono, B
+    );
+    torso.scale.z = 0.74;
+    // crossed collar: two pale bands meeting at the chest
+    const collarGeo = new THREE.BoxGeometry(0.045, 0.34, 0.02);
+    mesh(collarGeo, L.collar, B, [0.055, 1.37, 0.185], [0.18, 0, -0.42]);
+    mesh(collarGeo, L.collar, B, [-0.055, 1.37, 0.185], [0.18, 0, 0.42]);
+    // obi with a knot at the back
+    mesh(new THREE.CylinderGeometry(0.258, 0.258, 0.13, 16), L.obi, B, [0, 0.95, 0], null, [1, 1, 0.76]);
+    mesh(new THREE.BoxGeometry(0.2, 0.1, 0.07), L.obi, B, [0, 0.96, -0.2]);
+
+    if (L.armor !== undefined) this.buildArmor(L);
+    if (L.mantle !== undefined) {
+      // ragged traveling mantle over the shoulders
+      const mantle = mesh(
+        lathe([[0.36, 1.12], [0.34, 1.26], [0.3, 1.4], [0.2, 1.5], [0.1, 1.55]], 9, true),
+        L.mantle, B
+      );
+      mantle.scale.z = 0.82;
+      mantle.rotation.y = 0.3;
     }
-    const head = inked(new THREE.SphereGeometry(0.15, 12, 10), COLORS.skin, 0.025);
-    head.position.y = 1.66;
-    this.body.add(head);
-    if (L.topknot) {
-      const hair = inked(new THREE.SphereGeometry(0.155, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), COLORS.ink, 0.01);
-      hair.position.y = 1.67;
-      hair.rotation.x = -0.25;
-      const knot = inked(new THREE.CylinderGeometry(0.035, 0.03, 0.14, 6), COLORS.ink, 0.01);
-      knot.position.set(0, 1.82, -0.06);
-      knot.rotation.x = -0.9;
-      this.body.add(hair, knot);
+
+    // head and neck
+    mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 8), 0.92, B, [0, 1.57, 0]);
+    const head = mesh(new THREE.SphereGeometry(0.122, 16, 12), 0.92, B, [0, 1.7, 0.005], null, [0.92, 1.08, 1.0]);
+    mesh(new THREE.BoxGeometry(0.022, 0.045, 0.04), 0.92, B, [0, 1.69, 0.12]); // nose: shows which way he faces
+    // hair cap
+    mesh(new THREE.SphereGeometry(0.128, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), L.hair, B, [0, 1.71, -0.01], [-0.35, 0, 0], [0.95, 1.05, 1.02]);
+    if (look === 'player') {
+      // chonmage topknot laid forward over the crown
+      mesh(new THREE.CylinderGeometry(0.026, 0.022, 0.15, 7), L.hair, B, [0, 1.84, 0.0], [Math.PI / 2 - 0.2, 0, 0]);
+      mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.025, 7), 0.95, B, [0, 1.83, -0.06], [Math.PI / 2 - 0.2, 0, 0]);
+      // headband tails fluttering behind
+      mesh(new THREE.BoxGeometry(0.03, 0.16, 0.008), 0.95, B, [0.03, 1.66, -0.13], [0.5, 0, 0.25]);
+      mesh(new THREE.BoxGeometry(0.03, 0.13, 0.008), 0.95, B, [-0.02, 1.67, -0.13], [0.6, 0, -0.2]);
+      mesh(new THREE.TorusGeometry(0.124, 0.012, 6, 24), 0.95, B, [0, 1.75, 0.0], [Math.PI / 2 + 0.25, 0, 0], [0.95, 1.05, 1]);
     }
     if (L.hat === 'kasa') {
-      const kasa = inked(new THREE.ConeGeometry(0.48, 0.24, 14, 1, true), 0xb9ab8a, 0.03);
-      kasa.material = toon(0xb9ab8a).clone();
-      kasa.material.side = THREE.DoubleSide;
-      kasa.position.y = 1.8;
-      this.body.add(kasa);
+      // wide straw kasa that hides his eyes
+      mesh(facet(new THREE.ConeGeometry(0.54, 0.22, 20, 1, true)), 0.86, B, [0, 1.86, 0.02], [0.06, 0, 0]);
+      mesh(new THREE.TorusGeometry(0.535, 0.01, 4, 40), 0.3, B, [0, 1.75, 0.03], [Math.PI / 2 + 0.06, 0, 0]);
     } else if (L.hat === 'jingasa') {
-      const j = inked(new THREE.ConeGeometry(0.36, 0.12, 12), 0x2e2c29, 0.025);
-      j.position.y = 1.83;
-      this.body.add(j);
+      mesh(facet(new THREE.ConeGeometry(0.4, 0.13, 16, 1)), 0.2, B, [0, 1.86, 0]);
+      mesh(new THREE.SphereGeometry(0.03, 8, 6), 0.9, B, [0, 1.93, 0]);
     }
 
-    // arms
-    this.shoulderL = new THREE.Vector3(0.24, 1.45, 0.02);
-    this.shoulderR = new THREE.Vector3(-0.24, 1.45, 0.02);
-    this.armL = limb(L.robe, 0.06);
-    this.armR = limb(L.robe, 0.06);
-    this.body.add(this.armL, this.armR);
+    // scabbard at the left hip for sword users
+    if (weaponKind === 'katana') {
+      const saya = mesh(new THREE.CylinderGeometry(0.022, 0.018, 1, 8), 0.12, B);
+      placeLimb(saya, new THREE.Vector3(0.22, 0.98, 0.24), new THREE.Vector3(0.33, 0.7, -0.58));
+      mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 8), 0.8, B, [0.225, 0.975, 0.22], [Math.PI / 2 - 0.35, 0, 0]);
+    }
+
+    // arms: wide kimono sleeve to the elbow, bare forearm, hand
+    this.shoulderL = new THREE.Vector3(0.22, 1.43, 0.0);
+    this.shoulderR = new THREE.Vector3(-0.22, 1.43, 0.0);
+    const sleeveGeo = new THREE.CylinderGeometry(0.12, 0.075, 1, 10, 1, true);
+    const foreGeo = new THREE.CylinderGeometry(0.035, 0.045, 1, 8);
+    const handGeo = new THREE.SphereGeometry(0.045, 8, 6);
+    this.arms = [this.shoulderL, this.shoulderR].map((sh, i) => ({
+      sh,
+      sleeve: mesh(sleeveGeo, L.sleeve, B),
+      fore: mesh(foreGeo, L.forearm, B),
+      hand: mesh(handGeo, 0.92, B),
+      pole: new THREE.Vector3(i === 0 ? 1 : -1, -0.7, -0.35).normalize(),
+      elbow: new THREE.Vector3(),
+    }));
 
     // weapon
     this.weaponPivot = new THREE.Group();
     this.weaponPivot.rotation.order = 'YXZ';
-    this.body.add(this.weaponPivot);
+    B.add(this.weaponPivot);
     const w = weaponKind === 'yari' ? buildYari() : buildKatana();
     this.weapon = w;
     this.weaponPivot.add(w.group);
@@ -202,25 +321,62 @@ export class FighterModel {
     // red glint: the tell before a strike
     glintTex ||= glintTexture();
     this.glint = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: glintTex, transparent: true, depthTest: false, depthWrite: false })
+      new THREE.SpriteMaterial({ map: glintTex, transparent: true, depthTest: false, depthWrite: false, fog: false })
     );
     this.glint.scale.setScalar(0.001);
     this.glint.renderOrder = 10;
     this.glint.position.copy(w.tip);
     w.group.add(this.glint);
+    noEdges.add(this.glint);
 
-    // a faint ink shadow under the fighter
+    // a pale ink shadow under the fighter
     const shadow = new THREE.Mesh(
-      new THREE.CircleGeometry(0.55, 20),
-      flat(COLORS.ink, { transparent: true, opacity: 0.18, depthWrite: false })
+      new THREE.CircleGeometry(0.6, 24),
+      flat(COLORS.ink, { transparent: true, opacity: 0.08, depthWrite: false })
     );
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = 0.01;
     this.root.add(shadow);
+    noEdges.add(shadow);
     this.shadow = shadow;
 
+    this.gait = 0;
     this.cur = lerpPose(POSES[weaponKind].guard[1], POSES[weaponKind].guard[1], 0);
-    this.fall = 0;
+  }
+
+  buildArmor(L) {
+    const B = this.body;
+    // dō: lacquered chest plate, laced in pale cord
+    const dou = mesh(lathe([[0.27, 0.95], [0.285, 1.12], [0.3, 1.3], [0.27, 1.42], [0.18, 1.48]], 10, true), L.armor, B);
+    dou.scale.z = 0.78;
+    for (const y of [1.05, 1.17, 1.29]) {
+      const r = y < 1.2 ? 0.29 : 0.3;
+      mesh(new THREE.TorusGeometry(r, 0.007, 4, 30), 0.95, B, [0, y, 0], [Math.PI / 2, 0, 0], [1, 0.78, 1]);
+    }
+    // kusazuri: hanging tassets
+    const plate = new THREE.BoxGeometry(0.17, 0.24, 0.025);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      const p = mesh(plate, L.armor + 0.06, B, [Math.sin(a) * 0.3, 0.78, Math.cos(a) * 0.25]);
+      p.rotation.set(0, a, 0);
+      p.rotateX(-0.2);
+    }
+    // sode: shoulder guards
+    const sode = new THREE.BoxGeometry(0.2, 0.2, 0.03);
+    for (const side of [1, -1]) {
+      const s = mesh(sode, L.armor, B, [side * 0.31, 1.36, 0]);
+      s.rotation.set(0, side * Math.PI / 2, side * 0.25);
+    }
+    // sashimono: the banner on his back
+    mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.35, 6), 0.3, B, [0, 1.75, -0.24]);
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.3, 0.6),
+      new THREE.MeshBasicMaterial({ map: bannerTexture(), side: THREE.DoubleSide })
+    );
+    flag.position.set(0.16, 2.08, -0.24);
+    flag.rotation.y = Math.PI;
+    B.add(flag);
+    this.flag = flag;
   }
 
   // Ease toward a target pose. rate is how quickly (per second); Infinity snaps.
@@ -232,17 +388,34 @@ export class FighterModel {
     this.body.position.y = -p.crouch;
     this.body.rotation.x = p.lean * 0.6;
     this.hakama.scale.y = 1 - p.crouch * 0.6;
-    this.hakama.position.y = 0.43 - p.crouch * 0.25;
 
     this.weaponPivot.position.set(p.hx, p.hy, p.hz);
     this.weaponPivot.rotation.set(p.pitch, p.yaw, p.roll);
 
     // hands: two grips along the weapon axis
     tmpDir.set(0, 0, 1).applyEuler(this.weaponPivot.rotation);
-    tmpA.set(p.hx, p.hy, p.hz).addScaledVector(tmpDir, 0.06);
+    tmpA.set(p.hx, p.hy, p.hz).addScaledVector(tmpDir, 0.05);
     tmpB.set(p.hx, p.hy, p.hz).addScaledVector(tmpDir, this.gripOffset > 0 ? -0.5 : -0.1);
-    placeLimb(this.armR, this.shoulderR, tmpA);
-    placeLimb(this.armL, this.shoulderL, tmpB);
+    this.placeArm(this.arms[1], tmpA);
+    this.placeArm(this.arms[0], tmpB);
+  }
+
+  placeArm(arm, hand) {
+    const handPos = tmpC.copy(hand);
+    solveElbow(arm.sh, handPos, 0.3, 0.29, arm.pole, arm.elbow);
+    placeLimb(arm.sleeve, arm.sh, arm.elbow);
+    placeLimb(arm.fore, arm.elbow, handPos);
+    arm.hand.position.copy(handPos);
+  }
+
+  // Walking: feet step and the hakama sways.
+  step(dt, amount) {
+    this.gait += dt * 9 * amount;
+    const s = Math.sin(this.gait) * amount;
+    this.feet[0].position.z = 0.05 + s * 0.13;
+    this.feet[1].position.z = 0.05 - s * 0.13;
+    this.hakama.rotation.z = s * 0.035;
+    if (this.flag) this.flag.rotation.z = Math.sin(this.gait * 0.5) * 0.06;
   }
 
   setGlint(amount) {

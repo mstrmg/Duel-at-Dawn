@@ -535,6 +535,7 @@ export class Fighter {
 
     m.apply(target, rate, dt);
     m.setGlint(glint);
+    m.step(dt, this.moving && this.alive ? 1 : 0);
 
     m.root.position.copy(this.pos);
     m.root.rotation.y = this.yaw;

@@ -1,7 +1,7 @@
 // Duel at Dawn: combat prototype. Wires the scene, fighters, camera, effects and game flow.
 import * as THREE from 'three';
 import { PLAYER_DEF, RONIN_DEF, SPEARMAN_DEF, STANCE_NAMES } from './config.js';
-import { buildEnvironment } from './ink.js';
+import { buildEnvironment, PenRenderer } from './ink.js';
 import { Fighter } from './fighter.js';
 import { Combat } from './combat.js';
 import { RoninAI, SpearmanAI } from './ai.js';
@@ -39,9 +39,11 @@ class Game {
       this.renderer.setSize(innerWidth, innerHeight);
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
+      this.pen.setSize(innerWidth, innerHeight);
     });
 
     buildEnvironment(this.scene);
+    this.pen = new PenRenderer(this.renderer, this.scene, this.camera);
     this.events = new Events();
     this.combat = new Combat(this);
     this.fx = new Effects(this.scene);
@@ -372,7 +374,7 @@ class Game {
     this.fx.update(dt, realDt);
     this.hud.update(realDt);
     this.updateCamera(realDt);
-    this.renderer.render(this.scene, this.camera);
+    this.pen.render(performance.now() / 1000);
     i.endFrame();
   }
 
