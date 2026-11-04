@@ -43,7 +43,7 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 ### The opponents
 
-- **The Ronin** circles close, mirrors your line to guard it, strikes into your open line, sometimes strikes twice in a row, sometimes feints, and sometimes steps in from range.
+- **The Ronin** circles close, mirrors your line to guard it, strikes into your open line, sometimes strikes twice in a row, sometimes feints, and sometimes steps in from range. He answers every strike, drops his own windup into guard if you beat him to the punch, strikes back right after he blocks or evades you (a blocked lunge always gets punished), and parries more the more you press. He won't swing at you while you back away.
 - **The Spearman** keeps you at the end of his spear. Thrusts are narrow, so stepping aside works. Low attacks are wide sweeps. Get too close and he shoves you off with the shaft.
 
 ## Code map

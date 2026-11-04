@@ -196,6 +196,18 @@ export class Fighter {
     return true;
   }
 
+  // Drop a windup straight into guard (a skilled duelist's answer to being beaten
+  // to the punch). Costs breath like a feint, but there is no recover.
+  guardCancel(parry = false) {
+    if (this.state !== 'windup' || !this.attack || this.t > this.attack.windup * FEINT.latest) return false;
+    this.attack = null;
+    this.spend(FEINT.cost);
+    this.blockHeld = true;
+    this.setState('block');
+    this.blockTime = parry ? 0 : 1;
+    return true;
+  }
+
   setBlock(held) {
     this.blockHeld = held;
   }
@@ -345,7 +357,9 @@ export class Fighter {
         if (this.t >= a.active) {
           if (this.gassed) { this.becomeWinded(); break; }
           this.setState('recover');
-          this.stateDuration = a.recover + this.recoverExtra + (a.whiffed ? 0.25 : 0);
+          // a blow that landed recovers quickly: he is reeling, not you
+          const base = a.landed ? Math.min(a.recover, 0.36) : a.recover;
+          this.stateDuration = base + this.recoverExtra + (a.whiffed ? 0.25 : 0);
           this.recoverExtra = 0;
         }
         break;

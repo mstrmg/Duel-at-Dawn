@@ -53,7 +53,8 @@ export class Combat {
     if (guarded) {
       def.spend(BLOCK_COST[a.weaponKind] ?? 14);
       def.shove(att, a.kind === 'shove' ? 4.5 : 2.2);
-      att.recoverExtra = 0.12;
+      // a blocked lunge has thrown its weight forward and takes longer to recover
+      att.recoverExtra = a.move === 'lunge' ? 0.32 : 0.12;
       if (def.gassed) {
         def.becomeWinded();
         ev.emit('guardbreak', def, att);
@@ -102,6 +103,7 @@ export class Combat {
     const exposed = def.vulnerable;
     const caught = sweeping;
     def.takeHit(dmg, att, a.iai ? 6 : 4);
+    a.landed = true;
     if (a.iai) att.iaiHit = true;
     ev.emit('hit', def, att, { dmg, wrongGuard, exposed, killed: !def.alive, move: a.move, caught });
     return 'hit';

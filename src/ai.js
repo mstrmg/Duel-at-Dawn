@@ -1,7 +1,7 @@
 // Enemy duelists. Each reads the player, keeps its preferred distance, and shows a clear
 // tell (pose + red glint) before every strike.
 import * as THREE from 'three';
-import { counterOf, counters, STANCES } from './config.js';
+import { counterOf, counters, STANCES, STANCE_SWITCH_TIME } from './config.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -31,6 +31,26 @@ class EnemyAI {
     this.lastPlayerState = player.state;
     this.baited = 0;
     this.seenFeint = player.feintedAt ?? 0;
+    this.handled = null; // the player attack we already answered
+    this.pressure = []; // times of the player's recent strikes
+    game.events.on('block', (def, att) => this.game.ai === this && def === this.f && att === this.p && this.riposte());
+    game.events.on('evade', (def, att) => this.game.ai === this && def === this.f && att === this.p && this.riposte(true));
+  }
+
+  // After stopping a strike, answer at once while he is still recovering.
+  riposte(evaded = false) {
+    const f = this.f, p = this.p, P = this.P;
+    if (!P.riposte || Math.random() > P.riposte || !p.alive) return;
+    // timed so a normal blocked cut can still guard it; a blocked lunge cannot
+    this.later(0.2, () => {
+      if (!f.alive || f.state === 'stagger' || f.state === 'hitstun' || f.state === 'winded') return;
+      if (f.state === 'block') { f.setBlock(false); f.setState('idle'); }
+      if (f.busy || f.distTo(p) > f.weapon.reach + 1.2) return;
+      this.jobs.length = 0;
+      this.reacting = 0;
+      const stance = Math.random() < 0.6 ? counterOf(p.displayStance) : f.displayStance;
+      f.startAttack({ stance, windup: P.riposteWindup, lunge: 1.2 });
+    });
   }
 
   later(delay, fn) {
@@ -68,9 +88,36 @@ class EnemyAI {
   // called when the player starts a strike
   onPlayerWindup() {
     const f = this.f, p = this.p, P = this.P;
-    if (f.busy || !p.attack || this.baited > 0) return;
+    if (!p.attack || this.baited > 0) return;
     const impactIn = p.attack.windup - p.t;
-    const reaction = rand(P.reaction[0], P.reaction[1]);
+    // beaten to the punch: drop his own windup into guard if he can see it coming
+    if (f.state === 'windup' && f.attack && f.attack.windup - f.t > impactIn - 0.03) {
+      if (Math.random() < P.guardCancel) {
+        const parry = Math.random() < P.parry * 1.5;
+        this.later(rand(P.reaction[0], P.reaction[1]) * 0.6, () => {
+          if (p.state !== 'windup') return;
+          f.setStance(p.attack?.stance ?? f.stance);
+          f.pendingStance = null; f.stance = p.attack?.stance ?? f.stance; // guard snaps to the line
+          if (f.guardCancel(parry)) {
+            this.reacting = (p.attack ? p.attack.windup - p.t : 0) + 0.35;
+            this.later(this.reacting - 0.05, () => f.setBlock(false));
+          }
+        });
+      }
+      this.handled = p.attack;
+      return;
+    }
+    if (f.busy) return; // answered once he is free (see update)
+    // a strike that began while he was busy (punishing his recovery) can still be
+    // blocked if he is free in time, but never parried
+    const lateStart = this.handled !== p.attack && this.lastPlayerState === 'windup';
+    this.handled = p.attack;
+    // the more he presses, the readier the guard: spam meets parries
+    const now = this.time;
+    this.pressure = this.pressure.filter((t) => now - t < 1.8);
+    this.pressure.push(now);
+    const press = Math.max(0, this.pressure.length - 2); // 3+ strikes in under 2 s
+    const reaction = rand(P.reaction[0], P.reaction[1]) * Math.max(0.6, 1 - press * 0.12);
     // read the footwork behind the strike: sidestep a lunge, back out of a side cut,
     // and let a retreating cut go by rather than spend breath on it
     const move = p.attack.move;
@@ -78,26 +125,31 @@ class EnemyAI {
     let dodgeW = P.dodge, noneW = P.none;
     if (read && move === 'lunge') dodgeW *= 2.6;
     if (read && move === 'retreat') noneW *= 1.8;
-    const choice = weighted([
-      ['parry', P.parry], ['block', P.block], ['dodge', dodgeW], ['none', noneW],
-    ]);
+    noneW *= Math.pow(0.45, press);
     const stance = p.attack.stance;
+    let choice = weighted([
+      ['parry', lateStart ? 0 : P.parry + press * P.adapt], ['block', P.block], ['dodge', dodgeW], ['none', noneW],
+    ]);
+    // caught in the wrong line with no time to change guard: get out of the way instead
+    const late = f.displayStance !== stance && impactIn < reaction + STANCE_SWITCH_TIME + 0.03;
+    if (late && (choice === 'parry' || choice === 'block') && Math.random() < P.dodgeWhenLate) choice = 'dodge';
+    const lateral = late || (read && move === 'lunge');
     if (choice === 'parry') {
       // meet the blade in its line, right at the last moment
       const at = Math.max(reaction, impactIn - 0.1);
       this.later(Math.max(0, at - 0.16), () => f.setStance(stance));
       this.later(at, () => { if (!f.busy) f.setBlock(true); });
-      this.later(at + 0.35, () => f.setBlock(false));
-      this.reacting = at + 0.4;
+      this.later(at + 0.22, () => f.setBlock(false));
+      this.reacting = at + 0.26;
     } else if (choice === 'block') {
       this.later(reaction, () => { f.setStance(stance); f.setBlock(true); });
-      this.later(impactIn + 0.3, () => f.setBlock(false));
-      this.reacting = impactIn + 0.35;
+      this.later(impactIn + 0.14, () => f.setBlock(false));
+      this.reacting = impactIn + 0.18;
     } else if (choice === 'dodge') {
       const at = Math.max(reaction, impactIn - 0.2);
       // a side cut sweeps wide: if he read it, he gives ground straight back instead
       const dir = read && move === 'side' ? new THREE.Vector2(0, -1)
-        : read && move === 'lunge' ? new THREE.Vector2(Math.random() < 0.5 ? -1 : 1, 0)
+        : lateral ? new THREE.Vector2(Math.random() < 0.5 ? -1 : 1, 0)
         : new THREE.Vector2(Math.random() < 0.5 ? -1 : 1, P.dodgeBack ? -1 : -0.3);
       this.later(at, () => f.dodge(dir));
       this.reacting = at + 0.4;
@@ -113,25 +165,30 @@ class EnemyAI {
       this.seenFeint = p.feintedAt;
       this.onPlayerFeint();
     }
-    for (let i = this.jobs.length - 1; i >= 0; i--) {
-      if (this.jobs[i].at <= this.time) {
-        const j = this.jobs.splice(i, 1)[0];
-        if (f.alive) j.fn();
-      }
+    // run due jobs; a job may clear or add jobs, so take them out first
+    const due = this.jobs.filter((j) => j.at <= this.time);
+    if (due.length) {
+      this.jobs = this.jobs.filter((j) => j.at > this.time);
+      for (const j of due) if (f.alive) j.fn();
     }
     if (!f.alive) return;
     if (!p.alive) { f.moveInput.set(0, 0); f.setBlock(false); return; }
 
     // the player just started a strike
-    if (p.state === 'windup' && this.lastPlayerState !== 'windup') this.onPlayerWindup();
+    if (p.state === 'windup' && (this.lastPlayerState !== 'windup' || (this.handled !== p.attack && !f.busy && this.reacting <= 0))) this.onPlayerWindup();
     if (p.state === 'iaiStrike' && this.lastPlayerState !== 'iaiStrike') this.onPlayerIai();
     this.lastPlayerState = p.state;
 
     if (f.state === 'stagger' || f.state === 'hitstun') {
       this.jobs.length = 0;
       this.reacting = 0;
-      f.setBlock(false);
-    }
+      // reeling from a cut, he gets his guard up as he comes out of it if you press
+      if (f.state === 'hitstun' && this.hitGuard === undefined) this.hitGuard = Math.random() < (this.P.hitGuard ?? 0);
+      const guard = f.state === 'hitstun' && this.hitGuard && p.state === 'windup' && p.attack;
+      if (guard && f.displayStance !== p.attack.stance) f.setStance(p.attack.stance);
+      f.setBlock(!!guard);
+      if (guard) { this.handled = p.attack; this.reacting = 0.25; }
+    } else this.hitGuard = undefined;
     if (f.busy || this.reacting > 0) {
       f.moveInput.set(0, 0);
       return;
@@ -169,13 +226,18 @@ class EnemyAI {
 export class RoninAI extends EnemyAI {
   constructor(fighter, player, game) {
     super(fighter, player, game, {
-      reaction: [0.08, 0.15],
-      parry: 0.14, block: 0.46, dodge: 0.16, none: 0.24,
+      reaction: [0.07, 0.13],
+      parry: 0.1, block: 0.56, dodge: 0.2, none: 0.14,
       dodgeBack: false,
-      readMove: 0.55,
+      readMove: 0.8,
+      adapt: 0.3, // extra parry weight per strike when pressed
+      guardCancel: 0.75,
+      riposte: 0.75, riposteWindup: 0.44, // slow enough to read and guard
+      hitGuard: 0.8,
+      dodgeWhenLate: 0.7,
       strafe: 0.55,
       stanceEvery: [0.9, 2.2],
-      readStance: 0.55,
+      readStance: 0.8,
       drift: [0.24, 0.34],
       outlinedShift: 0.7,
     });
@@ -189,7 +251,7 @@ export class RoninAI extends EnemyAI {
     this.attackCooldown -= dt;
 
     // punish an opening
-    if (p.vulnerable && d < f.weapon.reach + 1.6 && f.breath > 15) {
+    if (p.vulnerable && d < f.weapon.reach + 1.0 && f.breath > 15) {
       this.strike(true);
       return;
     }
@@ -209,7 +271,9 @@ export class RoninAI extends EnemyAI {
       f.dodge(new THREE.Vector2(0, 1)); // a quick step in to close the gap
       return;
     }
-    if (this.attackCooldown <= 0 && d < f.weapon.reach + 1.5) {
+    // don't swing at someone giving ground: a whiff there gets lunged into
+    const retreating = p.moveInput.y < -0.3 && !p.busy;
+    if (this.attackCooldown <= 0 && d < f.weapon.reach + (retreating ? 0.3 : 0.9)) {
       this.strike(false);
       this.attackCooldown = rand(0.9, 2.0);
       return;
@@ -239,10 +303,15 @@ export class RoninAI extends EnemyAI {
 export class SpearmanAI extends EnemyAI {
   constructor(fighter, player, game) {
     super(fighter, player, game, {
-      reaction: [0.12, 0.2],
-      parry: 0.06, block: 0.42, dodge: 0.26, none: 0.26,
+      reaction: [0.1, 0.17],
+      parry: 0.1, block: 0.46, dodge: 0.28, none: 0.16,
       dodgeBack: true,
-      readMove: 0.35,
+      readMove: 0.6,
+      adapt: 0.22,
+      guardCancel: 0.5,
+      riposte: 0.5, riposteWindup: 0.6,
+      hitGuard: 0.6,
+      dodgeWhenLate: 0.45,
       strafe: 0.4,
       stanceEvery: [1.6, 3.0],
       readStance: 0.35,
