@@ -2,14 +2,16 @@
 import * as THREE from 'three';
 import {
   BREATH, DODGE, STEP, FEINT, IAI, STANCE_SWITCH_TIME, BLOCK_COOLDOWN, STAGGER_TIME, HITSTUN_TIME,
-  ARENA_RADIUS, counters,
+  ARENA_RADIUS, MOVE_STRIKES, counters,
 } from './config.js';
-import { FighterModel, POSES, lerpPose } from './models.js';
+import { FighterModel, POSES, lerpPose, movePoses } from './models.js';
 
 const easeOut = (t) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 const easeIn = (t) => Math.pow(Math.min(1, Math.max(0, t)), 2);
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
+const tmpMove = new THREE.Vector2();
+const tmpVel = new THREE.Vector3();
 const scratchPose = {};
 
 // States in which a fighter cannot start a new action.
@@ -69,7 +71,7 @@ export class Fighter {
   // Fighters who are caught out take an extra point of damage.
   get vulnerable() {
     return this.state === 'stagger' || this.state === 'winded' || this.state === 'iaiRecover' ||
-      (this.state === 'recover' && this.attack?.whiffed);
+      (this.state === 'recover' && this.attack?.whiffed && !this.attack.safe);
   }
 
   get invulnerable() {
@@ -130,7 +132,17 @@ export class Fighter {
     return this.pendingStance ?? this.stance;
   }
 
-  // opts: { stance, windup, kind: 'cut'|'thrust'|'sweep'|'shove', followUp, lunge, damage }
+  // Which move-strike the current footwork asks for (katana only).
+  moveStrike() {
+    if (this.weapon.kind !== 'katana') return null;
+    const { x, y } = this.moveInput;
+    if (Math.abs(x) < 0.3 && Math.abs(y) < 0.3) return null;
+    if (y > 0.3 && y >= Math.abs(x) * 0.8) return 'lunge';
+    if (y < -0.3 && -y >= Math.abs(x) * 0.8) return 'retreat';
+    return 'side';
+  }
+
+  // opts: { stance, windup, kind: 'cut'|'thrust'|'sweep'|'shove', move, followUp, lunge, damage }
   startAttack(opts = {}) {
     if (this.busy || this.breath <= 0) return false;
     const w = this.weapon;
@@ -142,24 +154,30 @@ export class Fighter {
     this.pendingStance = null;
     const opp = this.opponent;
     const countered = opp && counters(stance, opp.displayStance);
+    const move = opts.kind ? null : (opts.move === undefined ? null : opts.move);
+    const M = move ? MOVE_STRIKES[move] : null;
     const kind = opts.kind ?? (w.kind === 'yari' ? (stance === 2 ? 'sweep' : 'thrust') : 'cut');
-    let windup = (opts.windup ?? (countered ? w.counterWindup : w.windup)) + switchDelay;
-    let reach = w.reach;
-    let arc = w.arc;
+    let windup = (opts.windup ?? (countered ? w.counterWindup : w.windup)) + switchDelay + (M?.windup ?? 0);
+    let reach = w.reach + (M?.reach ?? 0);
+    let arc = M?.arc ?? w.arc;
     let damage = opts.damage ?? w.damage;
     if (kind === 'sweep') { windup += 0.1; arc = 1.4; reach -= 0.3; }
     if (kind === 'shove') { reach = 1.9; damage = 0; arc = 1.2; }
     // close the gap during the windup so a tell can start out of reach
     const dist = opp ? this.distTo(opp) : 0;
     const want = Math.max(0, dist - (reach - 0.45));
-    const lunge = Math.min(opts.lunge ?? w.lunge, want);
+    let lunge = Math.min(opts.lunge ?? w.lunge, want);
+    if (move === 'lunge') lunge = Math.min(M.step, Math.max(0, dist - 1.2));
+    if (move === 'retreat') lunge = 0;
     this.attack = {
-      stance, kind, windup, reach, arc, damage, lunge, countered,
-      active: w.active, recover: w.recover, followUp: opts.followUp ?? null,
-      resolved: false, whiffed: false, unblockable: false,
+      stance, kind, move, windup, reach, arc, damage, lunge, countered,
+      active: w.active, recover: w.recover + (M?.recover ?? 0), followUp: opts.followUp ?? null,
+      resolved: false, whiffed: false, unblockable: false, safe: move === 'retreat',
+      back: move === 'retreat' ? M.back : 0,
+      sideDir: move === 'side' ? Math.sign(this.moveInput.x) : 0,
       weaponKind: kind === 'shove' ? 'shove' : w.kind,
     };
-    this.spend(kind === 'shove' ? 8 : w.cost);
+    this.spend((kind === 'shove' ? 8 : w.cost) + (M?.cost ?? 0));
     this.setState('windup');
     this.game.events.emit('windup', this);
     return true;
@@ -191,6 +209,8 @@ export class Fighter {
     this.dodgeDir.set(0, 0, 0).addScaledVector(f, dir.y).addScaledVector(r, dir.x).normalize();
     // forward is a committed step in; back or sideways is an evade with i-frames
     this.dodgeKind = dir.y > 0.5 ? 'step' : 'evade';
+    this.dodgeLateral = Math.abs(dir.x) > Math.abs(dir.y);
+    this.dodgeAt = this.game.time;
     const D = this.dodgeKind === 'step' ? STEP : DODGE;
     this.dodgeDist = D.dist;
     this.spend(D.cost);
@@ -314,12 +334,14 @@ export class Fighter {
         break;
       case 'windup':
         this.applyLunge(dt, a.windup * 0.55, a.windup);
+        if (a.back) this.applyBack(dt, 0, a.windup + a.active);
         if (this.t >= a.windup) {
           this.setState('strike');
           this.game.combat.resolveStrike(this, this.opponent);
         }
         break;
       case 'strike':
+        if (a.back) this.applyBack(dt, -a.windup, a.active);
         if (this.t >= a.active) {
           if (this.gassed) { this.becomeWinded(); break; }
           this.setState('recover');
@@ -409,6 +431,15 @@ export class Fighter {
     this.pos.addScaledVector(this.forward(tmp), Math.min(step, allowed));
   }
 
+  // a retreating cut: give ground over the whole swing (t runs from `from` to `to`)
+  applyBack(dt, from, to) {
+    const a = this.attack;
+    const span = Math.max(0.0001, to - from);
+    const p0 = Math.min(1, Math.max(0, (this.t - dt - from) / span));
+    const p1 = Math.min(1, Math.max(0, (this.t - from) / span));
+    this.pos.addScaledVector(this.forward(tmp), -a.back * (easeOut(p1) - easeOut(p0)));
+  }
+
   updateMovement(dt) {
     const opp = this.opponent;
     let speedMul = 0;
@@ -420,8 +451,14 @@ export class Fighter {
       case 'recover': speedMul = 0.25; break;
     }
     this.moving = false;
-    if (speedMul > 0 && this.moveInput.lengthSq() > 0.01) {
-      const mv = this.moveInput.length() > 1 ? this.moveInput.clone().normalize() : this.moveInput;
+    let input = this.moveInput;
+    // a side cut keeps circling through its windup
+    if (this.state === 'windup' && this.attack?.sideDir) {
+      speedMul = MOVE_STRIKES.side.circle;
+      input = tmpMove.set(this.attack.sideDir, 0);
+    }
+    if (speedMul > 0 && input.lengthSq() > 0.01) {
+      const mv = input.length() > 1 ? input.clone().normalize() : input;
       const speed = this.def.speed * speedMul * (mv.y < 0 ? 0.85 : 1);
       if (opp) {
         // footwork is relative to the opponent: sideways circles him at the same distance,
@@ -481,6 +518,14 @@ export class Fighter {
     this.yaw += d * (1 - Math.exp(-rate * dt));
   }
 
+  windPose(a) {
+    return a.move ? movePoses(a.move, a.stance, a.sideDir).wind : this.poses.windup[a.stance];
+  }
+
+  endPose(a) {
+    return a.move ? movePoses(a.move, a.stance, a.sideDir).end : this.poses.strike[a.stance];
+  }
+
   // Work out the pose for the current state and push it to the model.
   updateModel(dt) {
     const P = this.poses;
@@ -497,7 +542,7 @@ export class Fighter {
         rate = 30;
         break;
       case 'windup': {
-        const wind = a.kind === 'shove' ? P.shoveWindup : P.windup[a.stance];
+        const wind = a.kind === 'shove' ? P.shoveWindup : this.windPose(a);
         const p = easeOut(this.t / (a.windup * 0.75));
         target = lerpPose(P.guard[a.stance], wind, p, scratchPose);
         rate = 22;
@@ -508,14 +553,14 @@ export class Fighter {
       }
       case 'strike': {
         if (a.kind === 'iai') break;
-        const wind = a.kind === 'shove' ? P.shoveWindup : P.windup[a.stance];
-        const end = a.kind === 'shove' ? P.shoveStrike : P.strike[a.stance];
+        const wind = a.kind === 'shove' ? P.shoveWindup : this.windPose(a);
+        const end = a.kind === 'shove' ? P.shoveStrike : this.endPose(a);
         target = lerpPose(wind, end, easeOut(this.t / a.active), scratchPose);
         rate = Infinity;
         break;
       }
       case 'recover': {
-        const end = a ? (a.kind === 'shove' ? P.shoveStrike : a.iai ? P.iaiEnd : P.strike[a.stance]) : P.guard[s];
+        const end = a ? (a.kind === 'shove' ? P.shoveStrike : a.iai ? P.iaiEnd : this.endPose(a)) : P.guard[s];
         target = lerpPose(end, P.guard[s], easeIn(this.t / Math.max(0.01, this.stateDuration)), scratchPose);
         rate = 20;
         break;
@@ -566,7 +611,13 @@ export class Fighter {
 
     m.apply(target, rate, dt);
     m.setGlint(glint);
-    m.step(dt, this.moving && this.alive ? 1 : 0);
+    // feet follow how the body actually moved this frame: walking, circling, dodges, lunges
+    if (!this.lastPos) this.lastPos = this.pos.clone();
+    tmpVel.subVectors(this.pos, this.lastPos).divideScalar(Math.max(dt, 1e-4));
+    this.lastPos.copy(this.pos);
+    const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+    const lx = tmpVel.x * cy - tmpVel.z * sy, lz = tmpVel.x * sy + tmpVel.z * cy;
+    m.step(dt, this.alive ? lx : 0, this.alive ? lz : 0);
 
     m.root.position.copy(this.pos);
     m.root.rotation.y = this.yaw;

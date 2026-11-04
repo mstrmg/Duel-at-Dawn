@@ -198,6 +198,9 @@ class Game {
     if (!this.hintsShown.has('first')) {
       this.hintsShown.add('first');
       setTimeout(() => this.mode === 'fight' && this.hud.hint('Q raises your guard high, E drops it low. Match his line and hold guard to block; raise it as the glint flares to parry.', 4.5), 900);
+    } else if (!this.hintsShown.has('moves')) {
+      this.hintsShown.add('moves');
+      setTimeout(() => this.mode === 'fight' && this.hud.hint('Strike while moving: W lunges in with a thrust, S cuts as you back off, A or D sweeps wide and catches a sidestep.', 4.5), 900);
     }
   }
 
@@ -349,7 +352,7 @@ class Game {
         hud.say('Wounded', 'bad');
         if (info.wrongGuard) hud.hint(`Wrong guard: that was a ${STANCE_NAMES[att.attack?.stance ?? 0]} strike.`, 1.8);
       } else {
-        hud.say(info.exposed ? 'Counter' : 'Cut', 'good');
+        hud.say(info.caught ? 'Caught' : info.exposed ? 'Counter' : info.move === 'lunge' ? 'Lunge' : 'Cut', 'good');
       }
     });
     ev.on('winded', (f) => {

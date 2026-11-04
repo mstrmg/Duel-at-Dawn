@@ -6,6 +6,7 @@ export const CONTROLS = [
   ['W S', 'Close or open the distance'],
   ['A D', 'Circle around him'],
   ['Left click or J', 'Strike from your stance'],
+  ['Strike + W / S / A D', 'Lunging thrust / Retreating cut / Side cut'],
   ['Right click or K (hold)', 'Guard your stance. Raise it as the blow lands to parry'],
   ['Guard during your own windup', 'Feint: pull the strike back to bait his guard'],
   ['Space', 'Evade back or sideways. With W held: a quick step in'],
@@ -47,11 +48,13 @@ export class PlayerController {
     if (i.wasPressed('Mouse0', 'KeyJ')) this.attackBuffer = 0.2;
     if (this.attackBuffer > 0) {
       this.attackBuffer -= dt;
-      if (!f.busy && f.state !== 'block' && f.startAttack()) this.attackBuffer = 0;
+      // how you are moving picks the cut: W lunges, S backs off, A/D sweeps
+      const opts = { move: f.moveStrike() };
+      if (!f.busy && f.state !== 'block' && f.startAttack(opts)) this.attackBuffer = 0;
       else if (f.state === 'block' && !f.busy) {
         // striking out of guard: drop it and swing
         f.setState('idle');
-        if (f.startAttack()) this.attackBuffer = 0;
+        if (f.startAttack(opts)) this.attackBuffer = 0;
       }
     }
 

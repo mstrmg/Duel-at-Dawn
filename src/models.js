@@ -54,6 +54,40 @@ export const POSES = {
   },
 };
 
+// Poses for the move-strikes (katana). sideDir +1 means circling to his right (-x).
+const moveCache = new Map();
+export function movePoses(move, stance, sideDir = 0) {
+  const key = `${move}${stance}${sideDir}`;
+  let p = moveCache.get(key);
+  if (p) return p;
+  const K = POSES.katana;
+  const high = stance === 0;
+  if (move === 'lunge') {
+    // a level thrust: draw the hands back to the hip, then drive them out with the body
+    p = {
+      wind: pose(-0.16, high ? 1.5 : 1.08, -0.08, high ? -2 : -10, -8, -0.1, 0.12),
+      end: pose(-0.02, high ? 1.48 : 1.08, 0.88, high ? 6 : -4, 0, 0.45, 0.16),
+    };
+  } else if (move === 'side') {
+    // a flat cut across the body, sweeping the way you circle
+    const m = sideDir > 0 ? -1 : 1;
+    const h = high ? 1.55 : 1.0;
+    p = {
+      wind: pose(-0.42 * m, h + 0.06, 0.02, high ? -10 : 8, -112 * m, -0.04, high ? 0 : 0.14),
+      end: pose(0.42 * m, h, 0.5, high ? -4 : 12, 96 * m, 0.14, high ? 0.04 : 0.16),
+    };
+  } else {
+    // retreat: the ordinary cut, but thrown while leaning away
+    const wind = { ...K.windup[stance] }, end = { ...K.strike[stance] };
+    wind.lean -= 0.18;
+    end.lean -= 0.12;
+    end.hz -= 0.08;
+    p = { wind, end };
+  }
+  moveCache.set(key, p);
+  return p;
+}
+
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 const tmpC = new THREE.Vector3();
@@ -227,15 +261,31 @@ export class FighterModel {
     const B = this.body;
 
     // feet in white tabi, peeking from under the hakama
-    const footGeo = new THREE.BoxGeometry(0.09, 0.06, 0.22);
-    this.feet = [mesh(footGeo, 0.92, this.root, [0.12, 0.03, 0.05]), mesh(footGeo, 0.92, this.root, [-0.12, 0.03, 0.05])];
+    const footGeo = new THREE.BoxGeometry(0.1, 0.07, 0.26);
+    footGeo.translate(0, 0.035, 0.09); // toes poke out from under the hem
+    // a fighting stance: the lead foot a little ahead
+    this.footBase = [new THREE.Vector3(0.14, 0, 0.12), new THREE.Vector3(-0.14, 0, -0.08)];
+    this.feet = this.footBase.map((b) => mesh(footGeo, 0.92, this.root, [b.x, 0, b.z]));
+    this.walk = { x: 0, z: 0, amt: 0 };
 
-    // hakama: wide pleated trousers; the facets read as pleats
+    // hakama: wide pleated trousers; the facets read as pleats. The seat is one piece,
+    // and each leg is its own bell hung from the hip, so it swings with its foot.
     this.hakama = mesh(
-      lathe([[0.001, 0.0], [0.47, 0.0], [0.46, 0.12], [0.4, 0.45], [0.31, 0.78], [0.25, 0.97], [0.001, 0.98]], 14, true),
+      lathe([[0.001, 0.44], [0.31, 0.44], [0.34, 0.58], [0.31, 0.78], [0.25, 0.97], [0.001, 0.98]], 14, true),
       L.hakama, this.root
     );
     this.hakama.scale.z = 0.82;
+    const HIP = 0.78;
+    const legGeo = lathe([[0.001, -HIP + 0.03], [0.21, -HIP + 0.03], [0.205, -HIP + 0.14], [0.17, -0.38], [0.14, -0.1], [0.001, 0]], 10, true);
+    this.legs = this.footBase.map((b) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(b.x * 0.75, HIP, b.z * 0.5);
+      this.root.add(pivot);
+      const leg = mesh(legGeo, L.hakama, pivot);
+      leg.scale.z = 0.9;
+      return pivot;
+    });
+    this.hip = HIP;
 
     // kimono upper body
     const torso = mesh(
@@ -388,6 +438,7 @@ export class FighterModel {
     this.body.position.y = -p.crouch;
     this.body.rotation.x = p.lean * 0.6;
     this.hakama.scale.y = 1 - p.crouch * 0.6;
+    this.crouchNow = p.crouch;
 
     this.weaponPivot.position.set(p.hx, p.hy, p.hz);
     this.weaponPivot.rotation.set(p.pitch, p.yaw, p.roll);
@@ -408,13 +459,44 @@ export class FighterModel {
     arm.hand.position.copy(handPos);
   }
 
-  // Walking: feet step and the hakama sways.
-  step(dt, amount) {
-    this.gait += dt * 9 * amount;
-    const s = Math.sin(this.gait) * amount;
-    this.feet[0].position.z = 0.05 + s * 0.13;
-    this.feet[1].position.z = 0.05 - s * 0.13;
-    this.hakama.rotation.z = s * 0.035;
+  // Footwork: vx, vz is the body's ground speed in model space (+z toward the
+  // opponent). Each foot swings along the direction of travel and lifts as it passes,
+  // so walking, circling and dodging all show real steps instead of a slide.
+  step(dt, vx, vz) {
+    const W = this.walk;
+    const speed = Math.hypot(vx, vz);
+    const k = 1 - Math.exp(-12 * dt);
+    const amt = Math.min(1, speed / 2.2);
+    W.amt += (amt - W.amt) * k;
+    if (speed > 0.15) {
+      W.x += (vx / speed - W.x) * k;
+      W.z += (vz / speed - W.z) * k;
+    }
+    // a stride covers about 0.55 m, so the feet keep pace with the ground
+    this.gait += Math.min(speed, 9) * dt * (Math.PI / 0.55);
+    const a = W.amt;
+    const reach = 0.28 * a;
+    let bob = 0;
+    for (let i = 0; i < 2; i++) {
+      const ph = this.gait + i * Math.PI;
+      const swing = Math.sin(ph); // -1 behind, +1 ahead
+      const lift = Math.max(0, Math.cos(ph)) * 0.1 * a; // up while it travels forward
+      const b = this.footBase[i];
+      const foot = this.feet[i];
+      foot.position.set(b.x + W.x * swing * reach, lift, b.z + W.z * swing * reach);
+      foot.rotation.x = -lift * 1.6 * Math.sign(W.z || 1);
+      // the hakama leg hangs from the hip and follows its foot
+      const leg = this.legs[i];
+      const c = this.crouchNow ?? 0;
+      const h = (this.hip - c * 0.6) - lift;
+      leg.position.y = this.hip - c * 0.6;
+      leg.scale.y = Math.max(0.5, h / this.hip);
+      leg.rotation.x = -Math.atan2(foot.position.z - leg.position.z, h) * 0.9;
+      leg.rotation.z = Math.atan2(foot.position.x - leg.position.x, h) * 0.9;
+      bob = Math.max(bob, lift);
+    }
+    this.body.position.y += -0.025 * a + bob * 0.25;
+    this.hakama.rotation.z = -W.x * Math.sin(this.gait) * 0.03 * a;
     if (this.flag) this.flag.rotation.z = Math.sin(this.gait * 0.5) * 0.06;
   }
 

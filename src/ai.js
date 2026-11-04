@@ -71,8 +71,15 @@ class EnemyAI {
     if (f.busy || !p.attack || this.baited > 0) return;
     const impactIn = p.attack.windup - p.t;
     const reaction = rand(P.reaction[0], P.reaction[1]);
+    // read the footwork behind the strike: sidestep a lunge, back out of a side cut,
+    // and let a retreating cut go by rather than spend breath on it
+    const move = p.attack.move;
+    const read = move && Math.random() < P.readMove;
+    let dodgeW = P.dodge, noneW = P.none;
+    if (read && move === 'lunge') dodgeW *= 2.6;
+    if (read && move === 'retreat') noneW *= 1.8;
     const choice = weighted([
-      ['parry', P.parry], ['block', P.block], ['dodge', P.dodge], ['none', P.none],
+      ['parry', P.parry], ['block', P.block], ['dodge', dodgeW], ['none', noneW],
     ]);
     const stance = p.attack.stance;
     if (choice === 'parry') {
@@ -88,7 +95,11 @@ class EnemyAI {
       this.reacting = impactIn + 0.35;
     } else if (choice === 'dodge') {
       const at = Math.max(reaction, impactIn - 0.2);
-      this.later(at, () => f.dodge(new THREE.Vector2(Math.random() < 0.5 ? -1 : 1, P.dodgeBack ? -1 : -0.3)));
+      // a side cut sweeps wide: if he read it, he gives ground straight back instead
+      const dir = read && move === 'side' ? new THREE.Vector2(0, -1)
+        : read && move === 'lunge' ? new THREE.Vector2(Math.random() < 0.5 ? -1 : 1, 0)
+        : new THREE.Vector2(Math.random() < 0.5 ? -1 : 1, P.dodgeBack ? -1 : -0.3);
+      this.later(at, () => f.dodge(dir));
       this.reacting = at + 0.4;
     }
   }
@@ -161,6 +172,7 @@ export class RoninAI extends EnemyAI {
       reaction: [0.08, 0.15],
       parry: 0.14, block: 0.46, dodge: 0.16, none: 0.24,
       dodgeBack: false,
+      readMove: 0.55,
       strafe: 0.55,
       stanceEvery: [0.9, 2.2],
       readStance: 0.55,
@@ -230,6 +242,7 @@ export class SpearmanAI extends EnemyAI {
       reaction: [0.12, 0.2],
       parry: 0.06, block: 0.42, dodge: 0.26, none: 0.26,
       dodgeBack: true,
+      readMove: 0.35,
       strafe: 0.4,
       stanceEvery: [1.6, 3.0],
       readStance: 0.35,

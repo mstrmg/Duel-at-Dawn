@@ -21,14 +21,17 @@ export class Combat {
     const f = att.forward(new THREE.Vector3());
     const angle = Math.acos(Math.max(-1, Math.min(1, f.dot(tmp))));
     const lateral = Math.sin(angle) * d;
-    const inArc = angle < a.arc || lateral < def.def.radius * 0.8;
-    if (d > a.reach + def.def.radius * 0.5 || !inArc) {
+    // a side cut sweeps after a sideways evade and catches it
+    const sweeping = a.move === 'side' && def.dodgeLateral && this.game.time - (def.dodgeAt ?? -9) < 0.5;
+    const inArc = sweeping || angle < a.arc || lateral < def.def.radius * 0.8;
+    if (d > a.reach + def.def.radius * 0.5 + (sweeping ? 1.3 : 0) || !inArc) {
       a.whiffed = true;
       ev.emit('whiff', att, def);
       return 'miss';
     }
 
-    if (def.invulnerable) {
+    // a side cut sweeps wide enough to catch a sideways evade
+    if (def.invulnerable && !sweeping) {
       a.whiffed = true;
       ev.emit('evade', def, att);
       return 'evade';
@@ -97,9 +100,10 @@ export class Combat {
     const wrongGuard = def.state === 'block';
     let dmg = a.damage + (def.vulnerable ? 1 : 0);
     const exposed = def.vulnerable;
+    const caught = sweeping;
     def.takeHit(dmg, att, a.iai ? 6 : 4);
     if (a.iai) att.iaiHit = true;
-    ev.emit('hit', def, att, { dmg, wrongGuard, exposed, killed: !def.alive });
+    ev.emit('hit', def, att, { dmg, wrongGuard, exposed, killed: !def.alive, move: a.move, caught });
     return 'hit';
   }
 }

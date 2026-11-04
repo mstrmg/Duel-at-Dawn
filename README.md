@@ -21,6 +21,7 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 | W / S | Close or open the distance |
 | A / D | Circle around your opponent (you keep the same distance) |
 | Left click or J | Strike from your stance |
+| Strike while holding W / S / A or D | Lunging thrust / retreating cut / side cut |
 | Right click or K (hold) | Guard your stance. Raise it just as the blow lands to parry. |
 | Guard during your own windup | Feint: pull the strike back to bait his guard or parry |
 | Space | Evade back or sideways (with i-frames). With W held: a quick, cheaper step in, no i-frames |
@@ -34,6 +35,7 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 - **Parry.** Raise a matching guard within 0.2 s of the blow landing. The moment freezes, ink splashes, the attacker is staggered and your next strike is a killing counter.
 - **Feints.** Raise your guard during your own windup to pull the strike back. If he had already moved to block or parry, he bites and is stuck guarding for a moment: strike him from the other line.
 - **Footwork.** Sideways movement circles your opponent. The dashed arcs on the ground show each weapon's reach, and your name is underlined in the HUD while he is inside your reach (his while you are inside his).
+- **Move + strike.** How you are moving picks the cut. With W it is a lunging thrust: it closes a lot of ground, but it is narrow (a sidestep beats it) and slow to recover. With S it is a short cut as you back off, and a miss leaves you safe. With A or D it is a wide side cut that keeps circling and catches a sideways evade. No keys held gives the ordinary cut.
 - **Breath.** Striking, guarding a hit, dodging, stepping, feinting and switching stance cost breath. Standing still refills it fastest. Run out and you are winded: open and slow for a moment.
 - **Draw-cut (iai).** Hold to sheathe and charge, release to lunge. A full charge (red bar) is unblockable and lethal. A miss leaves you exposed for a long second.
 - **Wounds.** You can take two cuts; the third kills. The Ronin and the Spearman fall in two (one if caught staggered, winded or after a whiff).

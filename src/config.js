@@ -38,6 +38,16 @@ export const DODGE = { time: 0.38, iStart: 0.02, iEnd: 0.28, dist: 3.0, cost: 20
 export const STEP = { time: 0.26, dist: 2.1, cost: 11 };
 export const FEINT = { cost: 8, recover: 0.15, latest: 0.8 }; // latest: fraction of the windup
 
+// The same strike button gives a different cut depending on how you are moving.
+// lunge (W): a long stepping thrust, narrow, slow to recover; sidestep it.
+// retreat (S): a short cut thrown while backing off; safe if it misses.
+// side (A/D): a wide horizontal cut that keeps circling and catches a sideways evade.
+export const MOVE_STRIKES = {
+  lunge: { windup: 0.07, reach: 0.25, step: 1.7, arc: 0.5, recover: 0.22, cost: 5 },
+  retreat: { windup: -0.05, reach: -0.25, back: 0.9, recover: -0.1, cost: -3 },
+  side: { windup: 0.05, arc: 1.7, recover: 0.06, cost: 2, circle: 0.7 },
+};
+
 export const STAGGER_TIME = 1.1; // after being parried
 export const HITSTUN_TIME = 0.45;
 
