@@ -1,7 +1,7 @@
 # Duel at Dawn — Project Context
 
 ## The game
-A 2D side-view samurai dueling roguelike in an ink wash (sumi-e) art style. A lone swordsman travels a branching road across 4 seasonal regions (Spring → Summer → Autumn → Winter) to face the Sword Saint in a final duel at dawn. Each run is one journey; death ends the run.
+A 3D third-person samurai dueling roguelike in an ink wash (sumi-e) art style, built in Three.js. The camera sits behind the player's shoulder, framing the opponent ahead. A lone swordsman travels a branching road across 4 seasonal regions (Spring → Summer → Autumn → Winter) to face the Sword Saint in a final duel at dawn. Each run is one journey; death ends the run.
 
 ## Core combat
 - Short, deadly duels: most fighters die in 1–3 hits.
@@ -19,10 +19,10 @@ A 2D side-view samurai dueling roguelike in an ink wash (sumi-e) art style. A lo
 - Meta-progression: on death the sword passes to a new wanderer (lineage), gaining a permanent trait; a home dojo unlocks techniques, swords, and characters between runs.
 
 ## Art & feel
-Black ink on paper tones, lots of empty space, red as the only accent color. Minimal sound: wind, footsteps, blade rings. Killing blows slow time with a red ink stroke.
+Black ink on paper tones, lots of empty space, red as the only accent color. In 3D this means ink-style rendering (toon shading, brushy outlines, paper texture, mist/fog for empty space) rather than realistic lighting. Minimal sound: wind, footsteps, blade rings. Killing blows slow time with a red ink stroke.
 
 ## Current plan (build in this order)
-1. Combat prototype: one player, one sword, two enemies (Ronin, Spearman). Make stances, parry, and breath feel great. Placeholder art is fine.
+1. Combat prototype: one player, one sword, two enemies (Ronin, Spearman). Make stances, parry, breath, and the third-person camera feel great. Placeholder art (simple 3D shapes) is fine.
 2. One region (Spring) with 5–6 map stops, a few techniques, and the Petal Blade boss.
 3. Wounds and upgrades.
 4. Later: other regions, lineage, honor, unlockable characters.
