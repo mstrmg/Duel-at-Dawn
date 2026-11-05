@@ -37,6 +37,11 @@ export const DODGE = { time: 0.38, iStart: 0.02, iEnd: 0.28, dist: 3.0, cost: 20
 // a committed step in: closes distance fast, cheaper than an evade, but no invulnerability
 export const STEP = { time: 0.26, dist: 2.1, cost: 11 };
 export const FEINT = { cost: 8, recover: 0.15, latest: 0.8 }; // latest: fraction of the windup
+// A strike thrown within `window` s of blocking answers the block: one wound only, a longer
+// step in after him (lunge, m), and safe if it misses.
+export const ANSWER = { window: 0.9, lunge: 1.3 };
+// The wanderer's guard comes up out of his own cut `after` s into the strike or recovery.
+export const QUICK_GUARD = { after: 0.04, cost: 6 };
 
 // The same strike button gives a different cut depending on how you are moving.
 // lunge (W): a long stepping thrust, narrow, slow to recover; sidestep it.
@@ -74,6 +79,7 @@ export const PLAYER_DEF = {
   speed: 2.8,
   radius: 0.45,
   turnRate: 14,
+  quickGuard: true, // the guard comes up straight out of a cut (QUICK_GUARD)
   weapon: {
     kind: 'katana',
     reach: 2.3,

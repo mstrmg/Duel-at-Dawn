@@ -23,7 +23,10 @@
     <div id="bars"><i></i><i></i></div>
     <div id="cut-title"></div>
     <div id="place"></div>
-    <div id="hint" class="hidden">WASD walk · Shift run · mouse to look · wheel to zoom</div>
+    <div id="run" class="hidden"></div>
+    <div id="prompt"></div>
+    <div id="map"><canvas></canvas><p>the spring road · M or Esc to close</p></div>
+    <div id="hint" class="hidden">WASD walk · Shift run · mouse to look · wheel to zoom · E at a door · M map</div>
     <div id="screen">
       <div class="card title">
         <h1>春 Spring</h1>
@@ -35,10 +38,13 @@
           <tr><th>Mouse</th><td>Look around (click to lock the mouse, Esc to free it; or drag)</td></tr>
           <tr><th>Arrow keys</th><td>Turn the camera</td></tr>
           <tr><th>Wheel</th><td>Camera distance</td></tr>
+          <tr><th>E</th><td>Go into a stop by the road (1–4 to choose, Esc to leave)</td></tr>
+          <tr><th>M</th><td>The road map</td></tr>
           <tr><th>In a duel</th><td>Q / E stance, click or J strike, hold right click or K to guard, Space evade, Shift draw-cut, Esc pause</td></tr>
         </table>
-        <p class="rules">Follow the dirt road north from the south gate: the crossroads, the inn to the west, the lookout to the east, the bridge, and the shrine where the <em>Petal Blade</em> waits.
-        Fighters wait on the road. Walk up to one and the duel begins where you stand; win and you walk on.</p>
+        <p class="rules">Walk the spring road north from the south gate, through the tea fields, over the red bridge, into the bamboo, up the climb and through the thousand torii to the shrine where the <em>Petal Blade</em> will wait.
+        Six fighters wait on the way: walk up to one and the duel begins where you stand. Each one you beat pays you, your wounds stay with you, and if you fall the journey is over.
+        Beside the road: an inn and a teahouse to rest and buy, two dojos to learn techniques, two shrines for blessings, a hot spring, and a dice player.</p>
       </div>
     </div>
     <script type="module" src="./src/spring/main.js"></script>

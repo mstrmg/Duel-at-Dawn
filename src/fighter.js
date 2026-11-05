@@ -2,9 +2,10 @@
 import * as THREE from 'three';
 import {
   BREATH, DODGE, STEP, FEINT, IAI, STANCE_SWITCH_TIME, BLOCK_COOLDOWN, STAGGER_TIME, HITSTUN_TIME,
-  ARENA_RADIUS, MOVE_STRIKES, counters,
+  ARENA_RADIUS, MOVE_STRIKES, counters, ANSWER, QUICK_GUARD,
 } from './config.js';
 import { FighterModel, POSES, lerpPose, movePoses } from './models.js';
+import { nextWound, WOUND_ORDER } from './wounds.js';
 
 const easeOut = (t) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 const easeIn = (t) => Math.pow(Math.min(1, Math.max(0, t)), 2);
@@ -13,6 +14,7 @@ const tmp2 = new THREE.Vector3();
 const tmpMove = new THREE.Vector2();
 const tmpVel = new THREE.Vector3();
 const scratchPose = {};
+const LIMP = { time: 0.42, dist: 0.9, cost: 14 }; // all a cut thigh allows
 
 // States in which a fighter cannot start a new action.
 const BUSY = new Set([
@@ -57,6 +59,15 @@ export class Fighter {
     this.recoverExtra = 0;
     this.deathT = 0;
     this.lastHitAt = -10;
+    this.wounds = []; // where he has been cut (see wounds.js); the host may hand some in
+    this.windUsed = false; // the Blessing of the Wind, once a duel
+    this.answerUntil = -9; // Answering Blade: a strike before this comes at once
+    this.blockedAt = -9; // when this fighter last blocked a blow
+    this.slipUntil = -9; // Slip Inside: a strike before this cannot be guarded
+    this.grazed = false; // the Blessing of the Pine, once a duel
+    this.powderUsed = false; // the blinding powder, once a duel
+    this.autoGuardUntil = -9; // Remaining Mind: the guard holds up on its own until then
+    this.slowNext = false; // Striking Down: his next windup is slower
     this.moveInput.set(0, 0);
     this.vel.set(0, 0, 0);
     this.model.root.rotation.set(0, 0, 0);
@@ -65,6 +76,9 @@ export class Fighter {
   }
 
   get busy() { return BUSY.has(this.state); }
+  // an art (technique, blessing or charm) the fighter has; see wounds.js
+  has(id) { return !!this.def.arts?.includes(id); }
+  wounded(id) { return this.wounds.includes(id); }
   get alive() { return this.state !== 'dead'; }
   get weapon() { return this.def.weapon; }
 
@@ -80,6 +94,7 @@ export class Fighter {
 
   // Is the guard actually up in a given stance right now?
   guarding(stance) {
+    if (this.state === 'windup' && this.attack?.guardLine === stance) return true; // the Iron Gate
     return this.state === 'block' && this.pendingStance === null && this.stance === stance;
   }
 
@@ -107,6 +122,15 @@ export class Fighter {
   }
 
   becomeWinded() {
+    if (this.has('wind') && !this.windUsed) {
+      // the Blessing of the Wind: a second wind instead
+      this.windUsed = true;
+      this.gassed = false;
+      this.breath = BREATH.max;
+      if (this.busy && this.state !== 'dodge') this.setState('idle');
+      this.game.events.emit('secondwind', this);
+      return;
+    }
     this.gassed = false;
     this.breath = 0;
     this.attack = null;
@@ -121,10 +145,21 @@ export class Fighter {
     if (s === this.stance && this.pendingStance === null) return;
     if (s === this.pendingStance) return;
     if (!this.alive || this.state === 'winded' || this.state === 'stagger') return;
+    // the red sageo cord: turn your own cut into the other line partway through the windup
+    if (this.state === 'windup' && this.has('sageo') && this.attack && !this.attack.iai && this.attack.kind === 'cut' &&
+        s !== this.attack.stance && this.t < this.attack.windup * 0.7) {
+      this.attack.stance = s;
+      this.stance = s;
+      this.pendingStance = null;
+      this.spend(4);
+      this.game.events.emit('redirect', this);
+      return;
+    }
     if (['windup', 'strike', 'iaiSheathe', 'iaiCharge', 'iaiStrike'].includes(this.state)) return;
     this.pendingStance = s;
     this.stanceTimer = STANCE_SWITCH_TIME;
-    this.spend(BREATH.stanceCost);
+    const sc = BREATH.stanceCost * (this.def.stanceCost ?? 1); // stanceCost: a charm can make it free
+    if (sc > 0) this.spend(sc);
     this.game.events.emit('stance', this);
   }
 
@@ -144,7 +179,15 @@ export class Fighter {
 
   // opts: { stance, windup, kind: 'cut'|'thrust'|'sweep'|'shove', move, followUp, lunge, damage }
   startAttack(opts = {}) {
-    if (this.busy || this.breath <= 0) return false;
+    // Second Draw: a draw-cut flows straight into another cut
+    const chain = this.state === 'iaiRecover' && this.has('nidan') && this.t > 0.06;
+    if ((this.busy && !chain) || this.breath <= 0) return false;
+    const fromGuard = this.state === 'block';
+    const answering = this.has('kaeshi') && this.game.time < this.answerUntil;
+    const slipped = this.has('irimi') && this.game.time < this.slipUntil;
+    // answering a block: the cut follows the blade you just stopped. It deals one wound, no
+    // more, reaches after him across the shove, and a miss does not leave you open.
+    const answer = this.game.time - this.blockedAt < ANSWER.window;
     const w = this.weapon;
     const stance = opts.stance ?? this.displayStance;
     // striking from a new stance flows straight into it, but the switch still takes time
@@ -162,24 +205,36 @@ export class Fighter {
     let arc = M?.arc ?? w.arc;
     let damage = opts.damage ?? w.damage;
     if (kind === 'sweep') { windup += 0.1; arc = 1.4; reach -= 0.3; }
+    if (this.slowNext) { windup += 0.3; this.slowNext = false; } // his blade was struck down
+    if (chain) windup = Math.min(windup, 0.17);
+    if (answering) windup = Math.min(windup, 0.1);
     if (kind === 'shove') { reach = 1.9; damage = 0; arc = 1.2; }
     // close the gap during the windup so a tell can start out of reach
     const dist = opp ? this.distTo(opp) : 0;
     const want = Math.max(0, dist - (reach - 0.45));
-    let lunge = Math.min(opts.lunge ?? w.lunge, want);
+    let lunge = Math.min(opts.lunge ?? (answer ? Math.max(w.lunge, ANSWER.lunge) : w.lunge), want);
     if (move === 'lunge') lunge = Math.min(M.step, Math.max(0, dist - 1.2));
     if (move === 'retreat') lunge = 0;
     this.attack = {
       stance, kind, move, windup, reach, arc, damage, lunge, countered,
       active: w.active, recover: w.recover + (M?.recover ?? 0), followUp: opts.followUp ?? null,
-      resolved: false, whiffed: false, unblockable: false, safe: move === 'retreat',
+      resolved: false, whiffed: false, unblockable: false, safe: move === 'retreat' || answer, answer,
       back: move === 'retreat' ? M.back : 0,
-      sideDir: move === 'side' ? Math.sign(this.moveInput.x) : 0,
+      sideDir: move === 'side' ? (opts.sideDir ?? Math.sign(this.moveInput.x)) : 0,
       weaponKind: kind === 'shove' ? 'shove' : w.kind,
+      // Slip Inside: from inside his guard, the cut cannot be stopped
+      unparryable: slipped, slipped,
+      // the Iron Gate: struck out of guard, the guard holds in that line until the blade leaves
+      guardLine: fromGuard && this.has('teppeki') ? stance : null,
+      chain, answering, returning: !!opts.returning,
     };
+    if (slipped) { this.attack.unblockable = true; this.slipUntil = -9; }
+    if (answering) this.answerUntil = -9;
+    if (answer) this.blockedAt = -9;
     this.spend((kind === 'shove' ? 8 : w.cost) + (M?.cost ?? 0));
     this.setState('windup');
     this.game.events.emit('windup', this);
+    if (chain || answering || slipped) this.game.events.emit('art', this, chain ? 'nidan' : answering ? 'kaeshi' : 'irimi');
     return true;
   }
 
@@ -208,6 +263,19 @@ export class Fighter {
     return true;
   }
 
+  // The wanderer can raise his guard straight out of his own cut, once it has been thrown,
+  // instead of waiting out the recovery: a punish can be blocked or parried.
+  // def.quickGuard is set for the player only, so the enemies fight as before.
+  quickGuard() {
+    if (!this.def.quickGuard || !this.blockHeld || this.breath <= 0 || this.t < QUICK_GUARD.after) return false;
+    if (this.state === 'recover' && this.attack?.followUp) return false;
+    this.attack = null;
+    this.spend(QUICK_GUARD.cost);
+    this.setState('block');
+    this.blockTime = 0;
+    return true;
+  }
+
   setBlock(held) {
     this.blockHeld = held;
   }
@@ -221,18 +289,34 @@ export class Fighter {
     this.dodgeDir.set(0, 0, 0).addScaledVector(f, dir.y).addScaledVector(r, dir.x).normalize();
     // forward is a committed step in; back or sideways is an evade with i-frames
     this.dodgeKind = dir.y > 0.5 ? 'step' : 'evade';
+    // a cut thigh: no evade, only a limping step, and no step in either
+    if (this.wounded('thigh')) this.dodgeKind = 'limp';
     this.dodgeLateral = Math.abs(dir.x) > Math.abs(dir.y);
     this.dodgeAt = this.game.time;
-    const D = this.dodgeKind === 'step' ? STEP : DODGE;
+    const D = this.dodgeKind === 'step' ? STEP : this.dodgeKind === 'limp' ? LIMP : DODGE;
     this.dodgeDist = D.dist;
-    this.spend(D.cost);
+    this.spend(D.cost * (this.def.dodgeCost ?? 1)); // dodgeCost: a technique's discount
     this.setState('dodge', D.time);
     this.game.events.emit('dodge', this);
+    // blinding powder: thrown as you slip his windup, once a duel
+    const o = this.opponent;
+    if (this.has('metsubushi') && !this.powderUsed && o?.state === 'windup' && o.attack && o.attack.kind !== 'shove') {
+      this.powderUsed = true;
+      o.attack.blinded = true;
+      this.game.events.emit('powder', this, o);
+    }
+    if (this.dodgeKind === 'limp') this.game.events.emit('limp', this);
     return true;
   }
 
   startIai() {
     if (this.busy || this.breath <= 0) return false;
+    if (this.wounded('arm')) {
+      // a cut forearm will not sheathe cleanly
+      if (this.game.time - (this.cantDrawAt ?? -9) > 1.5) this.game.events.emit('cantdraw', this);
+      this.cantDrawAt = this.game.time;
+      return false;
+    }
     this.iaiCharge = 0;
     this.pendingStance = null;
     this.setState('iaiSheathe', IAI.sheatheTime);
@@ -272,7 +356,34 @@ export class Fighter {
 
   // ----- reactions (called by combat resolution) -----
 
-  takeHit(dmg, from, knock = 4) {
+  // wound: where the blow landed (see wounds.js); each point of damage leaves a wound
+  takeHit(dmg, from, knock = 4, wound = null) {
+    if (this.has('pine') && !this.grazed) {
+      // the Blessing of the Pine: the first cut of the duel only grazes
+      this.grazed = true;
+      tmp.subVectors(this.pos, from.pos).setY(0).normalize();
+      this.vel.addScaledVector(tmp, knock);
+      this.attack = null;
+      this.setState('hitstun', HITSTUN_TIME * 0.6);
+      this.game.events.emit('graze', this, from);
+      return false;
+    }
+    if (dmg >= this.vitality && this.has('petal') && !this.def.petalSpent) {
+      // the Blessing of the Petal takes the killing blow, once a journey
+      this.def.petalSpent = true;
+      tmp.subVectors(this.pos, from.pos).setY(0).normalize();
+      this.vel.addScaledVector(tmp, knock * 1.4);
+      this.attack = null;
+      this.setState('hitstun', HITSTUN_TIME);
+      this.game.events.emit('petal', this, from);
+      return false;
+    }
+    if (wound) {
+      for (let i = 0; i < dmg; i++) {
+        if (this.wounds.length >= WOUND_ORDER.length) break;
+        this.wounds.push(nextWound(this.wounds, i === 0 ? wound : WOUND_ORDER[0]));
+      }
+    }
     this.vitality -= dmg;
     this.lastHitAt = this.game.time;
     this.attack = null;
@@ -286,6 +397,7 @@ export class Fighter {
     } else {
       this.setState('hitstun', HITSTUN_TIME);
     }
+    return true;
   }
 
   stagger(time = STAGGER_TIME) {
@@ -339,7 +451,20 @@ export class Fighter {
         break;
       case 'block':
         this.blockTime += dt;
-        if (!this.blockHeld) {
+        // a pierced side: the guard will not hold for long
+        if (this.wounded('side') && this.blockTime > 0.85) {
+          this.setState('idle');
+          this.blockCooldown = 0.45;
+          this.game.events.emit('guardslip', this);
+          break;
+        }
+        // the Flowing Guard follows the line of his windup
+        if (this.has('ryusui') && this.opponent?.state === 'windup' && this.opponent.attack &&
+            this.opponent.attack.kind !== 'shove' && this.opponent.attack.stance !== this.stance && this.pendingStance === null) {
+          this.stance = this.opponent.attack.stance;
+          this.game.events.emit('flow', this);
+        }
+        if (!this.blockHeld && this.game.time > this.autoGuardUntil) {
           this.setState('idle');
           this.blockCooldown = BLOCK_COOLDOWN;
         }
@@ -354,21 +479,32 @@ export class Fighter {
         break;
       case 'strike':
         if (a.back) this.applyBack(dt, -a.windup, a.active);
+        if (a.resolved && this.quickGuard()) break;
         if (this.t >= a.active) {
           if (this.gassed) { this.becomeWinded(); break; }
+          // Remaining Mind: a cut that landed brings the guard straight back up
+          if (a.landed && this.has('zanshin') && this.alive && this.opponent?.alive) {
+            this.attack = null;
+            this.setState('block');
+            this.blockTime = 0;
+            this.autoGuardUntil = this.game.time + 0.7;
+            this.game.events.emit('art', this, 'zanshin');
+            break;
+          }
           this.setState('recover');
           // a blow that landed recovers quickly: he is reeling, not you
           const base = a.landed ? Math.min(a.recover, 0.36) : a.recover;
-          this.stateDuration = base + this.recoverExtra + (a.whiffed ? 0.25 : 0);
+          this.stateDuration = base + this.recoverExtra + (a.whiffed && !a.turning ? 0.25 : 0);
           this.recoverExtra = 0;
         }
         break;
       case 'recover':
+        if (this.quickGuard()) break;
         if (this.t >= this.stateDuration) {
           const next = a?.followUp;
           this.attack = null;
           this.setState('idle');
-          if (next && this.opponent?.alive && !this.gassed) this.startAttack(next);
+          if (next && this.opponent?.alive && !this.gassed && !this.wounded('arm')) this.startAttack(next);
           else if (this.gassed) this.becomeWinded();
         }
         break;
@@ -405,7 +541,7 @@ export class Fighter {
         if (this.t >= this.stateDuration) this.setState('iaiCharge');
         break;
       case 'iaiCharge':
-        this.iaiCharge = Math.min(1, this.iaiCharge + dt / IAI.chargeTime);
+        this.iaiCharge = Math.min(1, this.iaiCharge + dt / (IAI.chargeTime * (this.def.iaiCharge ?? 1)));
         this.breath -= IAI.drain * dt;
         this.regenDelay = BREATH.regenDelay;
         if (this.breath <= 0) { this.breath = 0; this.becomeWinded(); }
@@ -473,7 +609,7 @@ export class Fighter {
     }
     if (speedMul > 0 && input.lengthSq() > 0.01) {
       const mv = input.length() > 1 ? input.clone().normalize() : input;
-      const speed = this.def.speed * speedMul * (mv.y < 0 ? 0.85 : 1);
+      const speed = this.def.speed * speedMul * (mv.y < 0 ? 0.85 : 1) * (this.wounded('thigh') ? 0.7 : 1);
       if (opp) {
         // footwork is relative to the opponent: sideways circles him at the same distance,
         // forward and back close or open the gap
@@ -511,7 +647,9 @@ export class Fighter {
     const dx = this.pos.x - ax, dz = this.pos.z - az;
     const r = Math.hypot(dx, dz);
     if (r > ar) this.pos.set(ax + (dx * ar) / r, 0, az + (dz * ar) / r);
-    this.pos.y = A?.y ?? 0;
+    // out of anything standing on it, then on the ground as it lies (or the level clearing)
+    if (A?.collide) A.collide(this.pos, this.def.radius);
+    this.pos.y = A?.groundAt ? A.groundAt(this.pos.x, this.pos.z) : A?.y ?? 0;
   }
 
   updateBreath(dt) {
@@ -520,7 +658,7 @@ export class Fighter {
     if (this.state === 'idle') rate = this.moving ? BREATH.regenMove : BREATH.regenIdle;
     else if (this.state === 'block') rate = BREATH.regenBlock;
     else if (this.state === 'winded') rate = 22;
-    this.breath = Math.min(BREATH.max, this.breath + rate * dt);
+    this.breath = Math.min(BREATH.max, this.breath + rate * (this.def.breathRegen ?? 1) * dt);
   }
 
   updateFacing(dt) {
@@ -628,7 +766,10 @@ export class Fighter {
     if (a?.kind === 'iai' && this.state === 'strike') target = P.iaiEnd;
 
     m.apply(target, rate, dt);
-    m.setGlint(glint);
+    m.setWounds(this.wounds);
+    // blood in his eye: the opponent cannot see the glint. Fox-fire shows a feint as pale.
+    const foe = this.opponent;
+    m.setGlint(foe?.wounded('brow') && !foe.has('hachimaki') ? 0 : glint, !!(this.attack?.feint && foe?.has('fox')));
     // feet follow how the body actually moved this frame: walking, circling, dodges, lunges
     if (!this.lastPos) this.lastPos = this.pos.clone();
     tmpVel.subVectors(this.pos, this.lastPos).divideScalar(Math.max(dt, 1e-4));

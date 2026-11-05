@@ -6,7 +6,9 @@
 // Fighters, the AI and Combat take the stage as their `game`: they read events, time,
 // combat, ai and (optionally) arena from it.
 import * as THREE from 'three';
-import { STANCE_NAMES } from './config.js';
+import { STANCE_NAMES, PARRY_WINDOW } from './config.js';
+import { WOUNDS, ARTS } from './wounds.js';
+import { showGain } from './gain.js';
 import { noEdges } from './ink.js';
 import { Combat } from './combat.js';
 import { PlayerController } from './player.js';
@@ -256,11 +258,16 @@ export class DuelStage {
       this.hitstop(0.09);
       this.slowmo(0.4, 0.3);
       this.shake = Math.max(this.shake, 0.2);
+      // say where the cut landed and what it takes away
+      const w = WOUNDS[info.wounds?.[0]];
       if (isP(def)) {
-        hud.say('Wounded', 'bad');
+        hud.say(w ? w.name : 'Wounded', 'bad');
         if (info.wrongGuard) hud.hint(`Wrong guard: that was a ${STANCE_NAMES[att.attack?.stance ?? 0]} strike.`, 1.8);
+        else if (w) hud.hint(w.text[0].toUpperCase() + w.text.slice(1) + '.', 3.2);
+        for (const id of info.wounds ?? []) showGain('wound', WOUNDS[id].name, WOUNDS[id].text);
       } else {
         hud.say(info.caught ? 'Caught' : info.exposed ? 'Counter' : info.move === 'lunge' ? 'Lunge' : 'Cut', 'good');
+        if (w) hud.hint(`${w.name}: ${w.foe}.`, 2.6);
       }
     });
     ev.on('winded', (f) => {
@@ -292,10 +299,84 @@ export class DuelStage {
       }
     });
     ev.on('sheathe', (f) => isP(f) && snd.sheathe());
+    // ----- wounds -----
+    ev.on('guardslip', (f) => {
+      snd.thud();
+      if (isP(f)) hud.say('Your guard slips', 'bad', 0.7);
+      else hud.say('His guard slips', 'good', 0.7);
+    });
+    ev.on('limp', (f) => { if (isP(f)) hud.say('You limp', 'bad', 0.6); });
+    ev.on('cantdraw', (f) => { if (isP(f)) hud.hint('Your cut forearm will not let you sheathe.', 1.6); });
+    // ----- arts -----
+    ev.on('art', (f, id) => {
+      if (!isP(f)) return;
+      const say = {
+        nidan: 'Second draw', kaeshi: 'Answer', irimi: 'Inside his guard', zanshin: 'Guard up',
+        uchiotoshi: 'Struck down', tsubame: 'Swallow return', tsuba: 'Stopped dead',
+      }[id];
+      if (say) hud.say(say, 'good', 0.6);
+      if (id === 'tsuba') { snd.ring(1, 0.6); this.hitstop(0.08); }
+    });
+    ev.on('graze', (f, from) => {
+      snd.ring(0.8, 1.6);
+      fx.spark(contact(f, from), 14);
+      this.hitstop(0.1);
+      hud.say(isP(f) ? 'Only a graze' : 'He is only grazed', isP(f) ? 'good' : 'bad', 1.2);
+      if (isP(f)) hud.hint(`${ARTS.pine.name}: the first cut of the duel leaves no wound.`, 2.2);
+    });
+    ev.on('mikiri', (f) => {
+      if (!isP(f)) return;
+      snd.ring(0.4, 2);
+      this.slowmo(0.3, 0.8);
+      hud.say("Hair's breadth", 'good', 0.7);
+    });
+    ev.on('powder', (f, o) => {
+      snd.whoosh();
+      fx.spark(tmp.copy(o.pos).setY(o.pos.y + 1.6), 24);
+      hud.say(isP(f) ? 'Powder in his eyes' : 'Powder in your eyes', isP(f) ? 'good' : 'bad', 1.2);
+    });
+    ev.on('cutdown', (winner, loser) => {
+      snd.ring(1.5, 1.1);
+      fx.spark(contact(winner, loser), 20);
+      this.hitstop(0.12);
+      this.slowmo(0.3, 0.4);
+      hud.say(isP(winner) ? 'Cut down' : 'Cut down by him', isP(winner) ? 'good' : 'bad');
+      if (isP(winner) && !this.hintsShown.has('cutdown')) {
+        this.hintsShown.add('cutdown');
+        hud.hint(`${ARTS.kiriotoshi.name}: ${ARTS.kiriotoshi.text}.`, 2.6);
+      }
+    });
+    ev.on('redirect', (f) => { if (isP(f)) { snd.whoosh(); hud.say('Turned', 'good', 0.45); } });
+    ev.on('flow', (f) => { if (isP(f)) snd.ring(0.25, 1.9); });
+    ev.on('secondwind', (f) => {
+      snd.ring(0.6, 1.5);
+      hud.say(isP(f) ? 'Second wind' : 'His second wind', isP(f) ? 'good' : 'bad');
+    });
+    ev.on('petal', (f, from) => {
+      snd.ring(1.2, 1.8);
+      fx.spark(contact(f, from), 30);
+      this.hitstop(0.2);
+      this.slowmo(0.2, 0.9);
+      this.shake = Math.max(this.shake, 0.2);
+      hud.say('The petals take the blow', 'good', 1.6);
+      hud.hint('The Blessing of the Petal is spent.', 2.2);
+    });
     ev.on('iai', (f) => {
       snd.whoosh();
       if (f.attack?.full) snd.ring(0.5, 1.6);
     });
+  }
+
+  // The bell charm rings once for each of his strikes, when it is time to raise a parry.
+  bell() {
+    const p = this.player, e = this.enemy;
+    if (!p?.has('bell') || e?.state !== 'windup' || !e.attack || e.attack.kind === 'shove') return;
+    const left = e.attack.windup - e.t;
+    if (left <= PARRY_WINDOW * 0.75 && e.attack.belled !== true) {
+      e.attack.belled = true;
+      this.sound.ring(0.55, 2.4);
+      this.hud.bell();
+    }
   }
 
   // ---------- per frame ----------
@@ -334,7 +415,10 @@ export class DuelStage {
         this.player.update(dt);
         this.enemy.update(dt);
       }
+      this.bell();
     }
+    // blood in your eye: his line and his tell are hidden on the HUD too
+    this.hud.setBlind(!!this.player?.wounded('brow') && !this.player.has('hachimaki') && this.active);
     this.updateArcs();
     this.fx.update(dt, realDt);
     return dt;
