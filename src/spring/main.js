@@ -1,7 +1,8 @@
-// The Spring map: walk the valley in the pen-and-ink renderer. Fighters wait on the
-// road; walk up to one and the combat prototype's duel plays out right there, then you
-// walk on. Beside the road are the stops: the inn, the dojo and the wayside shrine.
-// One run: coin from each duel, and wounds that stay with you until you rest.
+// The Spring map: walk the valley in the pen-and-ink renderer, from the south gate to the
+// great shrine. Fighters wait on the road; walk up to one and the combat prototype's duel
+// plays out right there, then you walk on. Beside the road are the stops: the inns, the
+// dojos, the shrines, the hot spring and the dice player. One journey: coin from each duel,
+// wounds that stay with you until you rest, and death sends a new wanderer from the gate.
 import * as THREE from 'three';
 import { PenRenderer, flat, noEdges } from '../ink.js';
 import { COLORS, PLAYER_DEF, RONIN_DEF, SPEARMAN_DEF } from '../config.js';
@@ -14,37 +15,67 @@ import { Input } from '../input.js';
 import { Effects } from '../fx.js';
 import { Hud } from '../hud.js';
 import { CONTROLS } from '../player.js';
-import { buildGround, heightAt, waterAt, CLEARINGS, STOPS, DUEL_SPOTS, ARENA_R, roadCurves } from './terrain.js';
+import { buildGround, heightAt, waterAt, CLEARINGS, STOPS, DUEL_SPOTS, ARENA_R, roadCurves, MAP, GATE, SHRINE } from './terrain.js';
 import { buildWorld, colliders, PINK } from './world.js';
 import { buildGrass } from './grass.js';
 import { DuelCutscene, squareUp } from './cutscene.js';
-import { newRun, stopCard, take, COIN, DUEL_PURSE } from './stops.js';
+import { newRun, stopCard, take, COIN, START_COIN } from './stops.js';
+import { RoadMap } from './map.js';
 
-// who waits at each duel spot on the road
+// who waits at each duel spot on the road. purse: coin he carries; elite: a harder duel
 const FOES = {
-  ronin: { def: RONIN_DEF, look: 'ronin', AI: RoninAI },
+  ronin: { def: { ...RONIN_DEF, purse: 25 }, look: 'ronin', AI: RoninAI },
   wanderer: {
-    def: { ...RONIN_DEF, id: 'wanderer', name: 'The Wandering Ronin', title: 'he wants the lookout to himself' },
+    def: { ...RONIN_DEF, id: 'wanderer', name: 'The Wandering Ronin', title: 'he wants the lookout to himself', purse: 25 },
     look: 'ronin', AI: RoninAI,
   },
-  spearman: { def: SPEARMAN_DEF, look: 'spearman', AI: SpearmanAI },
+  spearman: { def: { ...SPEARMAN_DEF, purse: 30 }, look: 'spearman', AI: SpearmanAI },
+  bandit: {
+    def: { ...RONIN_DEF, id: 'bandit', name: 'The Bamboo Bandit', title: 'quick of blade and short of patience', purse: 20, speed: 2.9,
+      weapon: { ...RONIN_DEF.weapon, reach: 2.05, windup: 0.54, counterWindup: 0.46, recover: 0.5 } },
+    look: 'bandit', AI: RoninAI,
+  },
+  masked: {
+    def: { ...RONIN_DEF, id: 'masked', name: 'The Masked Duelist', title: 'nobody has seen his face, or his second cut', elite: true,
+      purse: 40, vitality: 3, speed: 2.8, turnRate: 12,
+      weapon: { ...RONIN_DEF.weapon, reach: 2.3, windup: 0.5, counterWindup: 0.42, recover: 0.48 } },
+    look: 'masked', AI: RoninAI,
+  },
+  sohei: {
+    def: { ...SPEARMAN_DEF, id: 'sohei', name: 'The Temple Guard', title: 'a warrior monk who keeps the torii road', elite: true,
+      purse: 40, vitality: 3, speed: 2.4,
+      weapon: { ...SPEARMAN_DEF.weapon, reach: 3.7, windup: 0.72, counterWindup: 0.64, recover: 0.72 } },
+    look: 'sohei', AI: SpearmanAI,
+  },
 };
 const CHALLENGE_DIST = 10; // walk this close and the duel begins
 const WALK = 2.6;
 const RUN = 5.6;
-const BOUNDS = 112;
+const START = [GATE.x, GATE.z - 3];
 const STOP_REACH = 3.2; // stand this close to a door to go in
-const STOP_LIST = Object.values(STOPS);
+// the great shrine is a stop too: the end of the road, for now
+const GREAT = { id: 'great', kind: 'great', name: 'Shrine of the Petal Blade', x: SHRINE.x, z: SHRINE.z, door: [SHRINE.x, SHRINE.z - SHRINE.r + 1.5] };
+const STOP_LIST = [...Object.values(STOPS), GREAT];
+const at = (id, r, sub) => ({ name: STOPS[id].name, sub, at: [STOPS[id].x, STOPS[id].z], r });
 const PLACES = [
-  { name: 'The South Gate', sub: 'where the road begins', at: CLEARINGS.gate, r: 12 },
-  { name: 'Plum Hill Inn', sub: 'rest, food, and gear for the road', at: [STOPS.inn.x, STOPS.inn.z], r: 11 },
+  { name: 'The South Gate', sub: 'where the road begins, between the tea fields', at: CLEARINGS.gate, r: 12 },
+  at('inn', 11, 'rest, food, and gear for the road'),
   { name: 'The Crossroads', sub: 'the lookout to the east, a footpath west', at: [-5, 6], r: 8 },
-  { name: 'Willow Dojo', sub: 'an old master teaches one technique', at: [STOPS.dojo.x, STOPS.dojo.z], r: 11 },
+  at('dojo', 11, 'an old master teaches one technique'),
   { name: 'The Lookout', sub: 'a great cherry above the valley', at: CLEARINGS.lookout, r: 14 },
-  { name: 'The Bridge', sub: 'snowmelt running fast', at: [7, -27], r: 8 },
-  { name: 'Wayside Shrine', sub: 'a blessing for the road', at: [STOPS.shrine.x, STOPS.shrine.z], r: 8 },
-  { name: 'Shrine of the Petal Blade', sub: 'he waits beyond the torii', at: CLEARINGS.shrine, r: 16 },
+  at('shrine', 8, 'a blessing for the road'),
+  { name: 'The Red Bridge', sub: 'snowmelt running fast under the cherries', at: [5, -44], r: 10 },
+  at('onsen', 10, 'steam over the water, nobody about'),
+  { name: 'The Bamboo Forest', sub: 'the road narrows; keep your hand on the hilt', at: [-4, -140], r: 14 },
+  at('gambler', 7, 'odd or even, two dice in a cup'),
+  at('teahouse', 11, 'tea, a bed, and charms for travelers'),
+  { name: 'The Climb', sub: 'pines, stone, and the road turning on itself', at: [-14, -262], r: 14 },
+  at('dojo2', 11, 'a stricter master, higher up'),
+  at('fox', 8, 'two stone foxes keep watch'),
+  { name: 'The Thousand Torii', sub: 'red gates all the way to the shrine', at: [2, -372], r: 9 },
+  { name: 'Shrine of the Petal Blade', sub: 'the end of the spring road', at: CLEARINGS.shrine, r: 18 },
 ];
+const VERB = { inn: 'go into', teahouse: 'sit down at', dojo: 'step into', shrine: 'pray at', onsen: 'soak at', gambler: 'sit with', great: 'stand before' };
 
 class Keys {
   constructor() {
@@ -118,8 +149,8 @@ class SpringMap {
 
     this.ground = buildGround();
     this.scene.add(this.ground);
-    buildWorld(this.scene);
-    this.grassMat = buildGrass(this.scene);
+    this.water = buildWorld(this.scene);
+    this.grass = buildGrass(this.scene);
     this.petals = new Petals(this.scene);
 
     this.pen = new PenRenderer(this.renderer, this.scene, this.camera);
@@ -148,6 +179,7 @@ class SpringMap {
     this.promptEl = document.getElementById('prompt');
     this.stops = STOPS;
     this.near = null;
+    this.roadMap = new RoadMap(STOP_LIST);
 
     // the wanderer: walking, the sword sheathed and a hand on the hilt; in a duel, the
     // same figure is driven by the combat fighter
@@ -165,7 +197,7 @@ class SpringMap {
       this.scene.add(f.model.root);
       return { spot, f, AI: F.AI, beaten: false, restYaw: f.yaw };
     });
-    this.pos = new THREE.Vector3(CLEARINGS.gate[0], 0, CLEARINGS.gate[1] - 3);
+    this.pos = new THREE.Vector3(START[0], 0, START[1]);
     this.lastPos = this.pos.clone();
     this.yaw = Math.PI; // face north, up the road
     this.vel = new THREE.Vector3();
@@ -276,7 +308,7 @@ class SpringMap {
       const l = this.local(f);
       if (Math.abs(l.x) < f.halfW + 0.4 && Math.abs(l.z) < f.halfLen) {
         if (f.deckY) y = Math.max(y, f.deckY(THREE.MathUtils.clamp((l.z + f.halfLen - 0.5) / (f.halfLen * 2 - 1), 0, 1)) + 0.06);
-        else if (f.stones) y = Math.max(y, heightAt(this.pos.x, this.pos.z) + 0.52 * Math.min(1, waterAt(this.pos.x, this.pos.z) * 3));
+        else if (f.stones && waterAt(this.pos.x, this.pos.z) > 0.15) y = Math.max(y, f.level + 0.3);
       }
     }
     this.pos.y += (y - this.pos.y) * (1 - Math.exp(-20 * dt));
@@ -349,8 +381,9 @@ class SpringMap {
         this.vel.multiplyScalar(0.3);
       }
     }
-    const r = Math.hypot(p.x, p.z);
-    if (r > BOUNDS) { p.x *= BOUNDS / r; p.z *= BOUNDS / r; }
+    // the valley walls: you can climb partway, not out of the map
+    p.x = THREE.MathUtils.clamp(p.x, MAP.x0 + 20, MAP.x1 - 20);
+    p.z = THREE.MathUtils.clamp(p.z, MAP.z0 + 16, MAP.z1 - 8);
   }
 
   updatePlace() {
@@ -447,6 +480,8 @@ class SpringMap {
     // the stage always ticks: it keeps time for the waiting fighters and settles blood
     this.stage.step(dt);
     if (this.mode === 'explore') {
+      if (this.started && this.input.wasPressed('KeyM')) this.roadMap.toggle();
+      else if (this.roadMap.open && this.input.wasPressed('Escape')) this.roadMap.toggle(false);
       this.update(dt);
       this.updateFoes(dt);
       this.updateStops();
@@ -471,7 +506,11 @@ class SpringMap {
       cut = new THREE.Vector3(w.x, w.y + 1.1, w.z);
     }
     this.petals.update(dt, this.time, this.camera.position);
-    this.grassMat.uniforms.uTime.value = this.time;
+    this.grass.mat.uniforms.uTime.value = this.time;
+    this.grass.update(this.camera.position);
+    this.water.update(dt, this.time);
+    if (this.roadMap.open) this.roadMap.draw({ x: this.pos.x, z: this.pos.z, yaw: this.yaw },
+      this.foes.map((o) => ({ x: o.spot.x, z: o.spot.z, beaten: o.beaten, elite: o.f.def.elite })));
     this.pen.setCutaway(cut);
     this.ground.material.uniforms.uTime.value = this.time;
     if (!this.skipRender) this.pen.render(this.time); // tests can step without drawing
@@ -493,7 +532,7 @@ class SpringMap {
       f.updateModel(dt);
       if (this.started && d < 18 && !foe.announced) {
         foe.announced = true;
-        this.placeEl.innerHTML = `<b>${f.def.name}</b><span>${f.def.title}. Walk up to him to duel.</span>`;
+        this.placeEl.innerHTML = `<b>${f.def.name}</b><span>${f.def.elite ? 'a hard duel: ' : ''}${f.def.title}. Walk up to him to duel.</span>`;
         this.placeEl.classList.add('show');
         clearTimeout(this.placeTimer);
         this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 3200);
@@ -512,6 +551,7 @@ class SpringMap {
     this.fighter.vitality = this.run.vit; // wounds come with you into the duel
     foe.f.reset();
     this.near = null;
+    this.roadMap.toggle(false);
     this.promptEl.classList.remove('show');
     this.placeEl.classList.remove('show');
     document.getElementById('hint').classList.add('hidden');
@@ -542,23 +582,32 @@ class SpringMap {
     // free the mouse so the buttons can be clicked
     if (document.pointerLockElement) document.exitPointerLock();
     const left = this.foes.filter((o) => !o.beaten && o !== this.foe).length;
+    const purse = (this.foe.f.def.purse ?? 25) + this.run.purseBonus;
+    let paid = false;
     if (won && !this.foe.paid) {
       // his purse, and whatever wounds you took stay with you
-      this.foe.paid = true;
-      this.run.coin += DUEL_PURSE;
+      this.foe.paid = paid = true;
+      this.run.coin += purse;
+      this.run.won++;
       this.run.vit = Math.max(1, this.fighter.vitality);
+    } else if (won) {
+      this.run.vit = Math.max(1, this.fighter.vitality);
+    } else {
+      // rising again is practice: beat him after that and his purse is not yours
+      this.foe.paid = true;
     }
     const wounded = this.run.vit < this.run.def.vitality;
     const html = won
       ? `<div class="card"><h2>${name} falls.</h2>
         <p class="sub">${left ? `${left} more ${left === 1 ? 'blade waits' : 'blades wait'} on the road` : 'the road to the shrine is open'}</p>
-        <p class="purse">+${DUEL_PURSE} ${COIN} from his purse${wounded ? ' · your wounds stay with you until you rest at the inn' : ''}</p>
+        <p class="purse">${paid ? `+${purse} ${COIN} from his purse` : 'no purse: you fell to him once already'}${wounded ? ' · your wounds stay with you until you rest' : ''}</p>
         <div class="choices row"><button data-act="walk"><b>Walk on</b><kbd>Enter</kbd></button></div></div>`
       : `<div class="card"><h2>The road ends here.</h2>
         <p class="sub">Slain by ${name}</p>
+        <p class="say">The journey is over. Another wanderer sets out from the south gate, with nothing but a sword and ${START_COIN} ${COIN}.</p>
         <div class="choices row">
-          <button data-act="retry"><b>Rise again</b><kbd>R</kbd></button>
-          <button data-act="gate"><b>Back to the gate</b><kbd>G</kbd></button>
+          <button data-act="newrun"><b>Begin a new journey</b><kbd>Enter</kbd></button>
+          <button data-act="retry"><b>Rise again</b><span>practice: fight him again as you were</span><kbd>R</kbd></button>
         </div></div>`;
     this.hud.screenHtml(html);
     this.hud.screen.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => this.duelAction(b.dataset.act)));
@@ -570,19 +619,43 @@ class SpringMap {
       this.walkOn(this.fighter.pos);
     } else if (a === 'retry') {
       this.startDuel(this.foe);
-    } else if (a === 'gate') {
-      this.walkOn(new THREE.Vector3(CLEARINGS.gate[0], 0, CLEARINGS.gate[1] - 3));
-      this.yaw = this.camYaw = Math.PI;
+    } else if (a === 'newrun') {
+      this.newJourney();
     } else if (a === 'resume') {
       this.stage.setPaused(false);
     }
+  }
+
+  // Death ends the journey: a new wanderer, a new purse, and every fighter back on the road.
+  newJourney() {
+    this.run = newRun(PLAYER_DEF);
+    this.fighter.def = this.run.def;
+    for (const o of this.foes) {
+      o.beaten = false;
+      o.paid = false;
+      o.announced = false;
+      o.f.reset();
+      o.f.pos.set(o.spot.x, o.spot.y, o.spot.z);
+      o.f.lastPos = o.f.pos.clone();
+      o.f.yaw = o.restYaw;
+    }
+    this.foe = null;
+    this.walkOn(new THREE.Vector3(START[0], 0, START[1]));
+    this.yaw = this.camYaw = Math.PI;
+    this.fighter.yaw = this.yaw;
+    this.model.root.rotation.set(0, this.yaw, 0);
+    this.runKey = null;
+    this.placeEl.innerHTML = '<b>A new journey</b><span>the south gate, at dawn</span>';
+    this.placeEl.classList.add('show');
+    clearTimeout(this.placeTimer);
+    this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 3200);
   }
 
   // back to walking, from where the duel left you
   walkOn(at) {
     const p = this.fighter;
     // the loser's foe goes back to waiting where he stood
-    if (!this.foe.beaten) {
+    if (this.foe && !this.foe.beaten) {
       this.foe.f.reset();
       this.foe.f.pos.set(this.foe.spot.x, this.foe.spot.y, this.foe.spot.z);
       this.foe.f.lastPos = this.foe.f.pos.clone();
@@ -592,7 +665,7 @@ class SpringMap {
     this.mode = 'explore';
     // step back out of his reach so the duel doesn't start again at once
     this.pos.copy(at);
-    if (!this.foe.beaten) {
+    if (this.foe && !this.foe.beaten) {
       const s = this.foe.spot;
       const dx = at.x - s.x, dz = at.z - s.z, r = Math.hypot(dx, dz) || 1;
       if (r < CHALLENGE_DIST + 1.5) this.pos.set(s.x + (dx / r) * (CHALLENGE_DIST + 1.5), 0, s.z + (dz / r) * (CHALLENGE_DIST + 1.5));
@@ -619,7 +692,7 @@ class SpringMap {
     }
     if (near !== this.near) {
       this.near = near;
-      if (near) this.promptEl.innerHTML = `<kbd>E</kbd> ${near.kind === 'inn' ? 'go into' : near.kind === 'dojo' ? 'step into' : 'pray at'} ${near.name}`;
+      if (near) this.promptEl.innerHTML = `<kbd>E</kbd> ${VERB[near.kind]} ${near.kind === 'great' ? 'the great shrine' : near.name}`;
       this.promptEl.classList.toggle('show', !!near);
     }
     if (near && this.input.wasPressed('KeyE', 'Enter')) this.enterStop(near);
@@ -627,6 +700,7 @@ class SpringMap {
 
   enterStop(stop) {
     this.mode = 'stop';
+    this.roadMap.toggle(false);
     this.stop = stop;
     this.vel.set(0, 0, 0);
     this.promptEl.classList.remove('show');
@@ -640,6 +714,7 @@ class SpringMap {
     this.hud.screenHtml(stopCard(this.stop, this.run, note));
     this.hud.screen.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', () => this.pick(Number(b.dataset.pick))));
     this.hud.screen.querySelector('[data-act="leave"]').addEventListener('click', () => this.leaveStop());
+    this.hud.screen.querySelector('[data-act="newrun"]')?.addEventListener('click', () => { this.hud.screenHtml(''); this.newJourney(); });
   }
 
   pick(i) {
@@ -658,6 +733,7 @@ class SpringMap {
   handleStopKeys() {
     const i = this.input;
     for (let k = 0; k < 4; k++) if (i.wasPressed(`Digit${k + 1}`)) this.pick(k);
+    if (this.stop.kind === 'great' && i.wasPressed('KeyN')) { this.hud.screenHtml(''); this.newJourney(); return; }
     // E goes in, so a second E (or Esc) comes back out
     if (i.wasPressed('Escape', 'KeyE', 'Backspace')) this.leaveStop();
   }
@@ -667,12 +743,13 @@ class SpringMap {
     this.runEl.classList.toggle('hidden', !show);
     if (!show) return;
     const r = this.run;
-    const key = `${r.coin}|${r.vit}|${r.def.vitality}|${r.blessing}|${r.technique}`;
+    const marks = [...r.techniques, ...r.blessings, ...r.charms];
+    const key = `${r.coin}|${r.vit}|${r.def.vitality}|${marks.join()}`;
     if (key === this.runKey) return;
     this.runKey = key;
     const pips = Array.from({ length: r.def.vitality }, (_, i) => `<i class="${i < r.vit ? '' : 'lost'}"></i>`).join('');
-    const marks = [r.technique, r.blessing].filter(Boolean).map((m) => `<em>${m}</em>`).join('');
-    this.runEl.innerHTML = `<span class="pips">${pips}</span><b>${r.coin} ${COIN}</b>${marks}`;
+    marks.splice(0, marks.length, ...marks.map((m) => `<em>${m}</em>`));
+    this.runEl.innerHTML = `<span class="pips">${pips}</span><b>${r.coin} ${COIN}</b>${marks.join('')}`;
   }
 
   handleDuelKeys() {
@@ -691,7 +768,7 @@ class SpringMap {
     } else if (m === 'result') {
       if (this.stage.lastResult && i.wasPressed('Enter', 'Space')) this.duelAction('walk');
       else if (!this.stage.lastResult && i.wasPressed('KeyR')) this.duelAction('retry');
-      else if (!this.stage.lastResult && i.wasPressed('KeyG')) this.duelAction('gate');
+      else if (!this.stage.lastResult && i.wasPressed('Enter', 'KeyN')) this.duelAction('newrun');
     }
   }
 }

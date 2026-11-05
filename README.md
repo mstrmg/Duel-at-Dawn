@@ -15,22 +15,41 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 ## The Spring map
 
-`spring.html` is a walkable Spring valley, separate from combat for now (open `/spring.html` under `npm run dev`). A dirt road runs north from the south gate past the inn, through the crossroads (the dojo on the corner, the lookout road to the east, a footpath to the west), over a plank bridge, past a wayside shrine, and up an avenue of stone lanterns to the great shrine and its red torii. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
+`spring.html` is the Spring region, separate from combat for now (open `/spring.html` under `npm run dev`). It is finished except for the boss: a long valley, about 560 m from the south gate to the great shrine, with six fighters and eight stops on the way. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
 
-WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock it, or drag), the arrow keys turn the camera, and the wheel sets its distance. Trees and buildings between the camera and the wanderer are cut away around him.
+The road, south to north:
 
-Three fighters wait on the road: the Ronin on the main road before the crossroads, the Wandering Ronin on the lookout road, and the Spearman past the bridge. Each turns to watch you come. Walk within 10 m and a short cutscene plays (letterbox, a wide standoff, his face and title, you drawing, a gust of petals; Space, Enter or a click skips it), then the duel starts on a level patch of road 13 m across in radius, with the two of you 9 m apart as in the combat clearing. Win and you take 25 銭 from his purse and walk on; whatever vitality you lost stays lost until you heal. Lose and you can rise again (as you were when the duel began) or go back to the gate.
+1. **The south gate**, between terraced tea fields. **The Ronin** waits on the first stretch.
+2. **Plum Hill Inn**, then **the crossroads**: **Willow Dojo** on the corner, the lookout road east (where **the Wandering Ronin** keeps a great cherry to himself), a footpath west that fords the river on stepping stones.
+3. **The Red Bridge** over the river: snowmelt in a carved channel, inked currents, rocks with ripples, petals riding the water. **The Wayside Shrine** is just past it, then **the Spearman**.
+4. **The Hot Spring** beside the road, steaming in its ring of stones by a little bathhouse.
+5. **The bamboo forest**: **the Dice Player's Tarp**, **the Bamboo Bandit**, and **the Bamboo Teahouse** at the far edge.
+6. **The climb**: pines, rock and switchbacks. **Cliffside Dojo**, then **the Masked Duelist** (elite), then **the Fox Shrine**.
+7. **The thousand torii**: a red tunnel of gates with **the Temple Guard** (elite, a warrior monk with a long spear) before it, and at its end **the Shrine of the Petal Blade**, whose forecourt is where the boss will wait.
 
-Three stops sit right beside the main road, each a few steps off it, facing it across a trodden yard. Walk up to the door and press E; 1 to 4 choose, Esc (or E) goes back out. The corner of the screen shows your vitality, coin, technique and blessing while you walk.
+WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock it, or drag), the arrow keys turn the camera, and the wheel sets its distance. Trees and buildings between the camera and the wanderer are cut away around him. **M** opens the road map: the valley unrolled as a sideways scroll, read right to left, with every stop, every fighter (a red slash waiting, a red cross for an elite, a grey cross once beaten) and an arrow for you.
 
-- **Plum Hill Inn** (just past the first duel): rest the night for full vitality (15 銭), onigiri for +1 vitality (8 銭), straw sandals to walk and step 8% quicker (20 銭), a whetstone for +15 cm reach (25 銭). You start with 20 銭.
-- **Willow Dojo** (at the crossroads): learn one technique. Swift Draw charges the draw-cut a third faster, Iron Wrist makes blocking cost 40% less breath, Wind Step makes evades and steps cost a third less.
-- **Wayside Shrine** (past the bridge): one blessing. The Wind makes breath return 25% faster; the Petal adds one vitality and mends a wound.
+**Duels.** Each fighter turns to watch you come. Walk within 10 m and a short cutscene plays (Space, Enter or a click skips it), then the duel starts on a level patch of road 13 m in radius. The elites take three cuts, not two. Win and you take his purse (20 to 40 銭) and walk on; whatever vitality you lost stays lost until you heal. **Death ends the journey**: a new wanderer sets out from the south gate with 20 銭, and every fighter is back on the road. "Rise again" lets you refight the duel as practice, but that fighter's purse is then forfeit.
 
-- `src/spring/terrain.js`: the height field, roads and stream (baked into one mask texture) and the ground shader
-- `src/spring/world.js`: trees, azaleas, wildflowers, rocks, fences, lanterns, bridge, inn, dojo, wayside shrine, great shrine and torii, merged per material; colliders
-- `src/spring/stops.js`: the run (coin, vitality, the wanderer's own stats) and what the inn, dojo and shrine offer
-- `src/spring/grass.js`: instanced ink grass that sways and thins with distance
+**Stops.** Every stop sits a few steps off the main road, facing it across a trodden yard. Walk up to the door and press E; 1 to 4 choose, Esc (or E) goes back out. The corner of the screen shows your vitality, coin, techniques, blessings and charms while you walk. You start with 20 銭.
+
+- **Plum Hill Inn**: rest the night for full vitality (15 銭), onigiri for +1 vitality (8 銭), straw sandals to walk and step 8% quicker (20 銭), a whetstone for +15 cm reach (25 銭).
+- **Willow Dojo**: learn one technique. Swift Draw charges the draw-cut a third faster, Iron Wrist makes blocking cost 40% less breath, Wind Step makes evades and steps cost a third less.
+- **Wayside Shrine**: one blessing. The Wind makes breath return 25% faster; the Petal adds one vitality and mends a wound.
+- **Hot Spring**: a soak mends two wounds, once a journey, free.
+- **The Dice Player**: odd or even for 10 or 25 銭; win and he pays double (you always call even). Three rolls and he has had enough of you.
+- **Bamboo Teahouse**: tea and dango for +1 vitality (6 銭), a nap for full vitality (18 銭), and charms: the Bell charm widens the perfect-parry window by 40% (30 銭), the Red sageo cord makes switching stance cost no breath (22 銭).
+- **Cliffside Dojo**: one more technique. Swift Cut makes strikes wind up 12% faster, Falling Leaf recovers from a strike 20% sooner, Light Hand makes strikes cost 30% less breath.
+- **Fox Shrine**: one more blessing. The Fox gives back 25 breath on every perfect parry; the Rice adds 15 銭 to every purse you win.
+- **Shrine of the Petal Blade**: the end of the road for now. It shows what you carry and offers a new journey.
+
+- `src/spring/layout.js`: the plan of the valley: roads, the river, where each fighter and each stop sits
+- `src/spring/terrain.js`: the height field (valley walls, the climb, the carved river channel and the hot spring's pool), the road mask and the ground shader
+- `src/spring/water.js`: the river and pool surfaces (inked currents and ripples), petals on the water, steam
+- `src/spring/world.js`: trees, bamboo, flowers, rocks, fences, the bridge and every building, merged per material in 48 m chunks; colliders
+- `src/spring/grass.js`: instanced ink grass and reeds in tiles that sway and are hidden with distance
+- `src/spring/stops.js`: the run (coin, vitality, the wanderer's own stats) and what each stop offers
+- `src/spring/map.js`: the road map
 - `src/spring/main.js`: walking, collisions, the shoulder camera, place names, going into the stops, and starting and ending duels on the road
 - `src/spring/cutscene.js`: the shots before a duel on the road
 - `src/duel.js`: one duel wherever it happens (event wiring, AI, hit-stop and slow-mo, reach arcs, the duel camera). Both pages use it

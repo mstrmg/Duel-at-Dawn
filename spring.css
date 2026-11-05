@@ -99,3 +99,17 @@
 .card.stop .choices button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--ink); transform: none; }
 .card.stop .choices button:not(:disabled) { border-color: var(--ink); }
 .card.stop .choices:not(.row) button:not(:disabled):hover kbd { color: var(--paper); }
+
+/* the road map: the valley as an ink scroll */
+#map {
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(233, 226, 208, 0.82); pointer-events: none;
+  opacity: 0; transition: opacity 0.25s;
+}
+#map.show { opacity: 1; }
+#map canvas {
+  background-color: #e9e2d0;
+  background: var(--paper); border: 2px solid var(--ink); border-radius: 3px 10px 4px 12px;
+  box-shadow: 0 0 0 6px var(--paper), 0 0 0 8px var(--ink);
+}
+#map p { margin: 8px 0 0; font-size: 14px; letter-spacing: 0.14em; color: var(--ink-soft); }

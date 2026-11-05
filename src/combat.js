@@ -1,6 +1,6 @@
 // Resolves a strike at the moment of impact: miss, evade, parry, block, clash or hit.
 import * as THREE from 'three';
-import { PARRY_WINDOW, CLASH_WINDOW, BLOCK_COST } from './config.js';
+import { PARRY_WINDOW, CLASH_WINDOW, BLOCK_COST, BREATH } from './config.js';
 
 const tmp = new THREE.Vector3();
 
@@ -40,9 +40,10 @@ export class Combat {
     const guarded = def.guarding(a.stance) && !a.unblockable;
 
     // perfect parry: guard raised in the right line just as the blow arrives
-    if (guarded && !a.unparryable && def.blockTime <= PARRY_WINDOW) {
+    if (guarded && !a.unparryable && def.blockTime <= PARRY_WINDOW * (def.def.parryWindow ?? 1)) {
       att.stagger();
       att.spend(20);
+      if (def.def.parryBreath) def.breath = Math.min(BREATH.max, def.breath + def.def.parryBreath); // a blessing
       def.blockTime = PARRY_WINDOW + 1; // one parry per raise
       def.setState('idle');
       def.blockCooldown = 0;

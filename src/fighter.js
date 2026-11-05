@@ -124,7 +124,8 @@ export class Fighter {
     if (['windup', 'strike', 'iaiSheathe', 'iaiCharge', 'iaiStrike'].includes(this.state)) return;
     this.pendingStance = s;
     this.stanceTimer = STANCE_SWITCH_TIME;
-    this.spend(BREATH.stanceCost);
+    const sc = BREATH.stanceCost * (this.def.stanceCost ?? 1); // stanceCost: a charm can make it free
+    if (sc > 0) this.spend(sc);
     this.game.events.emit('stance', this);
   }
 

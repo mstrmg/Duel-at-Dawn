@@ -249,6 +249,10 @@ const LOOKS = {
   player: { kimono: 0.3, hakama: 0.2, obi: 0.1, collar: 0.97, hair: 0.04, hat: null, sleeve: 0.28, forearm: 0.9 },
   ronin: { kimono: 0.66, hakama: 0.46, obi: 0.25, collar: 0.95, hair: 0.1, hat: 'kasa', sleeve: 0.6, forearm: 0.9, mantle: 0.42 },
   spearman: { kimono: 0.74, hakama: 0.55, obi: 0.3, collar: 0.95, hair: 0.05, hat: 'jingasa', sleeve: 0.7, forearm: 0.22, armor: 0.26 },
+  // the Spring road's other fighters
+  bandit: { kimono: 0.44, hakama: 0.3, obi: 0.62, collar: 0.8, hair: 0.06, hat: 'band', sleeve: 0.42, forearm: 0.86, mantle: 0.24 },
+  masked: { kimono: 0.16, hakama: 0.12, obi: 0.72, collar: 0.9, hair: 0.05, hat: 'tengai', sleeve: 0.18, forearm: 0.9 },
+  sohei: { kimono: 0.9, hakama: 0.62, obi: 0.3, collar: 0.95, hair: 0.05, hat: 'hood', sleeve: 0.88, forearm: 0.9, armor: 0.42 },
 };
 
 export class FighterModel {
@@ -331,6 +335,20 @@ export class FighterModel {
       // wide straw kasa that hides his eyes
       mesh(facet(new THREE.ConeGeometry(0.54, 0.22, 20, 1, true)), 0.86, B, [0, 1.86, 0.02], [0.06, 0, 0]);
       mesh(new THREE.TorusGeometry(0.535, 0.01, 4, 40), 0.3, B, [0, 1.75, 0.03], [Math.PI / 2 + 0.06, 0, 0]);
+    } else if (L.hat === 'band') {
+      // a twisted headband knotted at the back, the tails loose
+      mesh(new THREE.TorusGeometry(0.128, 0.018, 6, 24), 0.94, B, [0, 1.74, 0.0], [Math.PI / 2 + 0.2, 0, 0], [0.96, 1.06, 1]);
+      mesh(new THREE.BoxGeometry(0.035, 0.2, 0.01), 0.94, B, [0.04, 1.64, -0.14], [0.6, 0, 0.3]);
+      mesh(new THREE.BoxGeometry(0.035, 0.16, 0.01), 0.94, B, [-0.03, 1.65, -0.14], [0.7, 0, -0.25]);
+    } else if (L.hat === 'tengai') {
+      // a deep woven basket hat that hides the whole head: a komuso's
+      mesh(facet(new THREE.LatheGeometry([[0.0, 2.0], [0.13, 1.995], [0.185, 1.94], [0.2, 1.82], [0.195, 1.68], [0.18, 1.56]].map(([r, y]) => new THREE.Vector2(r, y)), 14)), 0.8, B, [0, -0.02, 0.01]);
+      for (let k = 0; k < 4; k++) mesh(new THREE.TorusGeometry(0.193 - Math.abs(k - 1.5) * 0.008, 0.006, 4, 24), 0.35, B, [0, 1.62 + k * 0.09, 0.01], [Math.PI / 2, 0, 0]);
+    } else if (L.hat === 'hood') {
+      // a warrior monk's white hood, wrapped close round the face
+      mesh(new THREE.SphereGeometry(0.165, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), L.kimono, B, [0, 1.7, -0.02], [-0.25, 0, 0], [1, 1.05, 1.05]);
+      mesh(new THREE.BoxGeometry(0.26, 0.12, 0.05), L.kimono, B, [0, 1.6, 0.12], [0.1, 0, 0]);
+      mesh(lathe([[0.17, 1.62], [0.24, 1.45], [0.28, 1.36]], 12), L.kimono, B);
     } else if (L.hat === 'jingasa') {
       mesh(facet(new THREE.ConeGeometry(0.4, 0.13, 16, 1)), 0.2, B, [0, 1.86, 0]);
       mesh(new THREE.SphereGeometry(0.03, 8, 6), 0.9, B, [0, 1.93, 0]);
