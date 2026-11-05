@@ -66,7 +66,7 @@ const FOES = {
 // The Spring boss waits on the great shrine's forecourt. See boss.js for his fight.
 const PETAL_BLADE = {
   def: { ...RONIN_DEF, id: 'petal', name: 'The Petal Blade', title: 'he took the color out of the spring, and keeps it in his sleeves',
-    elite: true, boss: true, purse: 60, vitality: 3, speed: 2.9, turnRate: 12,
+    elite: true, boss: true, purse: 60, vitality: 5, maxHit: 1, speed: 2.9, turnRate: 12,
     weapon: { ...RONIN_DEF.weapon, reach: 2.35, windup: 0.56, counterWindup: 0.47, recover: 0.5 } },
   look: 'petal', AI: PetalBladeAI,
 };

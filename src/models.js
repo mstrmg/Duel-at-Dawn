@@ -128,6 +128,9 @@ export const HERO_COLORS = {
   coat: 0x2b4a86, // winter: indigo, the color of a clear night over snow
   hakama: 0xc65d82, // spring: the petals' rose, taken back from the Petal Blade
 };
+// Before a part wins its color it is drawn as solid dark ink cloth, the same weight as the
+// colored parts, so the figure reads as one piece rather than a colored top over a sketch.
+const HERO_INK = 0x2e2c29;
 // A material that can be drained of its color: bloom 1 is full color, 0 is plain ink.
 // Used by the Petal Blade, whose clothes hold the color he took, and the shrine's cherries.
 export function bloomMaterial(tone, color = PINK.blossom, ink = PINK.ink) {
@@ -349,6 +352,7 @@ function glintTexture(fill = '#b3171d') {
 }
 let glintTex = null;
 let paleTex = null; // fox-fire: a feint seen for what it is
+let pinkTex = null; // the Petal Blade's turning blade
 
 function bannerTexture() {
   const c = document.createElement('canvas');
@@ -646,7 +650,7 @@ export class FighterModel {
       for (const m of meshes) {
         // a sleeve has its own tone, a little lighter than the body of the coat
         const t = part === 'coat' && this.arms?.some((a) => a.sleeve === m) ? this.L.sleeve : tone;
-        m.material = on ? accent(HERO_COLORS[part]) : (typeof t === 'number' ? hatch(t) : t);
+        m.material = on ? accent(HERO_COLORS[part]) : this.look === 'player' ? accent(HERO_INK) : (typeof t === 'number' ? hatch(t) : t);
       }
     }
   }
@@ -822,7 +826,8 @@ export class FighterModel {
 
   // pale: fox-fire shows a feint in a cold blue instead of red
   setGlint(amount, pale = false) {
-    const map = pale ? (paleTex ??= glintTexture('#6ea8c0')) : glintTex;
+    // pale: fox-fire shows a feint; 'pink': the Petal Blade's blade will turn its line
+    const map = pale === 'pink' ? (pinkTex ??= glintTexture('#e8609a')) : pale ? (paleTex ??= glintTexture('#6ea8c0')) : glintTex;
     if (map && this.glint.material.map !== map) { this.glint.material.map = map; this.glint.material.needsUpdate = true; }
     const s = amount <= 0 ? 0.001 : 0.25 + amount * 0.75;
     this.glint.scale.setScalar(s);

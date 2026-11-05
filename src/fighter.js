@@ -387,6 +387,8 @@ export class Fighter {
       this.game.events.emit('petal', this, from);
       return false;
     }
+    // a master takes no more than this from one blow, however open he was (the Petal Blade)
+    if (this.def.maxHit) dmg = Math.min(dmg, this.def.maxHit);
     if (wound) {
       for (let i = 0; i < dmg; i++) {
         if (this.wounds.length >= WOUND_ORDER.length) break;
@@ -778,7 +780,8 @@ export class Fighter {
     m.setWounds(this.wounds);
     // blood in his eye: the opponent cannot see the glint. Fox-fire shows a feint as pale.
     const foe = this.opponent;
-    m.setGlint(foe?.wounded('brow') && !foe.has('hachimaki') ? 0 : glint, !!(this.attack?.feint && foe?.has('fox')));
+    m.setGlint(foe?.wounded('brow') && !foe.has('hachimaki') ? 0 : glint,
+      this.attack?.turn && !this.attack.turned ? 'pink' : !!(this.attack?.feint && foe?.has('fox')));
     // feet follow how the body actually moved this frame: walking, circling, dodges, lunges
     if (!this.lastPos) this.lastPos = this.pos.clone();
     tmpVel.subVectors(this.pos, this.lastPos).divideScalar(Math.max(dt, 1e-4));
