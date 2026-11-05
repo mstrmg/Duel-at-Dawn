@@ -5,7 +5,7 @@
 // - While he is in bloom (BLOOM.veil or more), petals take your cuts: no wound, but each
 //   cut tears color out of him. Below it, your cuts wound him as any fighter.
 // - Parrying him, baiting him with a feint and cutting him pull color back into the trees.
-// - His cuts on you, his parries of yours, and time all feed his bloom.
+// - His cuts on you, his parries of yours, and time (while his veil is down) feed his bloom.
 // - The more color he holds, the quicker his blade; in full bloom he looses a petal storm,
 //   quick cuts alternating lines.
 // - In bloom, he can melt into petals as you swing and step out at your side (petal step).
@@ -19,19 +19,19 @@ import { flat, noEdges } from '../ink.js';
 import { setShrineBloom } from './world.js';
 
 export const BLOOM = {
-  start: 0.6, // the trees begin bright: he has not taken it all yet
-  // Miles (2026-11-05): the veil takes two parries to break. From start, and from rebloom
-  // (each time it comes back), two parries (or two cuts into the petals) bring it down.
-  rebloom: 0.6,
+  start: 0.78, // the trees begin bright: he has not taken it all yet
+  // Miles (2026-11-05): the veil takes four parries to break. From start, and from rebloom
+  // (each time it comes back), four parries (or four cuts into the petals) bring it down.
+  rebloom: 0.78,
   veil: 0.3, // at or above this the petals turn your cuts aside
-  siphon: 0.025, // per second, while the duel goes on
+  siphon: 0.025, // per second, while his veil is down (after spentHold)
   spentHold: 6, // once his color is spent, it stays spent this long before he can draw more
-  hitHim: -0.3, // a cut turned aside by the petals tears this much out of him
+  hitHim: -0.15, // a cut turned aside by the petals tears this much out of him
   wound: -0.05, // a cut that wounds him
-  parry: -0.25, // you parry him
-  bait: -0.12, // he bites on your feint
+  parry: -0.15, // you parry him
+  bait: -0.08, // he bites on your feint
   hitYou: 0.25, // he cuts you
-  block: -0.05, // you block him
+  block: -0.03, // you block him
   parried: 0.25, // he parries you
   step: -0.06, // a petal step spends a little of it
   secondAt: 2, // his vitality when the second bloom comes
@@ -212,7 +212,8 @@ export class BossFight {
   update(dt) {
     const host = this.host;
     if (this.hold > 0) this.hold -= dt;
-    else if (this.active && host.stage.mode === 'fight') this.add(BLOOM.siphon * dt);
+    // he draws color back only while his veil is down; while it holds, your four parries count
+    else if (this.active && host.stage.mode === 'fight' && this.bloom < BLOOM.veil) this.add(BLOOM.siphon * dt);
     // his blade quickens with the color he holds
     if (this.active && this.f) {
       const k = 1 + BLOOM.speed * 0.3 - BLOOM.speed * this.bloom;
