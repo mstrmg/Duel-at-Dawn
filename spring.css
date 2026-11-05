@@ -59,3 +59,43 @@
   font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.18em; color: var(--ink);
   text-shadow: 0 0 14px var(--paper), 0 0 5px var(--paper);
 }
+
+/* the run: vitality, coin, and what you have learned, in the corner while walking */
+#run {
+  position: fixed; left: 24px; top: 20px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  font-size: 18px; pointer-events: none;
+  padding: 6px 14px; border-radius: 4px 12px 3px 10px;
+  background: rgba(233, 226, 208, 0.82); box-shadow: 0 0 14px 6px rgba(233, 226, 208, 0.6);
+}
+#run.hidden { display: none; }
+#run b { font-weight: 800; letter-spacing: 0.06em; }
+#run em { font-style: normal; font-size: 14px; color: var(--ink-soft); letter-spacing: 0.08em; border-bottom: 2px solid var(--pink); }
+.pips { display: inline-flex; gap: 7px; vertical-align: middle; }
+.pips i { width: 13px; height: 13px; border-radius: 50% 45% 55% 48%; background: var(--ink); }
+.pips i.lost { background: transparent; border: 2px solid var(--red); transform: scale(0.85); }
+
+/* at a door: what E does */
+#prompt {
+  position: fixed; left: 50%; bottom: 22vh; transform: translate(-50%, 6px);
+  font-size: 20px; letter-spacing: 0.08em; pointer-events: none;
+  opacity: 0; transition: opacity 0.3s, transform 0.3s;
+  text-shadow: 0 0 12px var(--paper), 0 0 4px var(--paper);
+}
+#prompt.show { opacity: 1; transform: translate(-50%, 0); }
+#prompt kbd, .card .purse kbd {
+  font-family: var(--font); font-weight: 800; border: 2px solid var(--ink);
+  border-radius: 3px 6px 2px 7px; padding: 0 7px; margin-right: 6px; background: rgba(255, 255, 255, 0.4);
+}
+
+/* a stop's card: the offers in a column */
+.card.stop { max-width: 560px; }
+.card .purse { display: flex; justify-content: center; align-items: center; gap: 16px; font-size: 18px; font-weight: 800; margin: 0 0 6px; }
+.card .say { color: var(--ink-soft); font-size: 16px; min-height: 1.5em; margin: 4px 0 12px; }
+.card.stop .choices:not(.row) { flex-direction: column; align-items: stretch; gap: 10px; }
+.card.stop .choices:not(.row) button { padding: 10px 18px; flex-direction: row; justify-content: space-between; flex-wrap: wrap; text-align: left; }
+.card.stop .choices:not(.row) button b { font-size: 19px; }
+.card.stop .choices:not(.row) button span { flex: 1; margin-left: 12px; }
+.card.stop .choices button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--ink); transform: none; }
+.card.stop .choices button:not(:disabled) { border-color: var(--ink); }
+.card.stop .choices:not(.row) button:not(:disabled):hover kbd { color: var(--paper); }

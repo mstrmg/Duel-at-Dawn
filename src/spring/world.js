@@ -1,11 +1,11 @@
 // The Spring map: cherry trees, pink azaleas and wildflowers, ink grass, rocks, fences,
-// stone lanterns, a bridge, the inn, the shrine and its red torii. Static props are
+// stone lanterns, a bridge, the inn, the dojo, the wayside shrine, the great shrine and its red torii. Static props are
 // merged into one mesh per material so the whole valley is a few dozen draw calls.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { COLORS } from '../config.js';
 import { hatch, flat, noEdges, seeded } from '../ink.js';
-import { heightAt, roadAt, waterAt, roadCurves, streamCurve, CLEARINGS, WORLD, DUEL_SPOTS, ARENA_R } from './terrain.js';
+import { heightAt, roadAt, waterAt, roadCurves, streamCurve, CLEARINGS, STOPS, WORLD, DUEL_SPOTS, ARENA_R } from './terrain.js';
 
 // Spring's accent: pink, alongside the red that marks danger, the sun and the shrine
 export const PINK = { petal: 0xf5bcd0, blossom: 0xee9ab9, deep: 0xdf6a95, ink: 0x8c2a52 };
@@ -343,9 +343,9 @@ function roadFence(curve, t0, t1, side, offset) {
   return pts;
 }
 
-function torii(B, x, z, ry) {
+function torii(B, x, z, ry, scale = 1) {
   const y = heightAt(x, z);
-  const p = new THREE.Matrix4().compose(v1.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), v2.set(1, 1, 1));
+  const p = new THREE.Matrix4().compose(v1.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), v2.set(scale, scale, scale));
   const span = 2.6, h = 4.6;
   for (const sx of [-span, span]) {
     B.put(GEO.pole, MAT.torii, sx, h / 2, 0, 0, 0, sx * -0.012, 0.22, h, 0.22, p);
@@ -359,7 +359,7 @@ function torii(B, x, z, ry) {
   for (const s of [-1, 1]) {
     B.put(GEO.box, MAT.woodDark, s * (span + 1.35), h + 0.36, 0, 0, 0, s * 0.18, 1.6, 0.18, 0.42, p);
     v1.set(s * span, 0, 0).applyMatrix4(p);
-    addCircle(v1.x, v1.z, 0.3);
+    addCircle(v1.x, v1.z, 0.3 * scale);
   }
 }
 
@@ -482,6 +482,38 @@ function jizo(B, x, z, ry) {
   addCircle(x, z, 0.3);
 }
 
+// painted characters on a board: a canvas label floated just off the board's face
+// (both faces when two-sided). ry: the direction the text faces, as a building's door.
+function inkLabel(scene, text, x, y, z, ry, w, h, { twoSided = false, vertical = false, color = '#161514' } = {}) {
+  const c = document.createElement('canvas');
+  const px = 256;
+  c.width = vertical ? Math.round((px * w) / h) : px;
+  c.height = vertical ? px : Math.round((px * h) / w);
+  const g = c.getContext('2d');
+  g.fillStyle = color;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  if (vertical) {
+    const chars = [...text];
+    const size = Math.min(c.width * 0.8, (c.height * 0.9) / chars.length);
+    g.font = `800 ${size}px "Shippori Mincho", serif`;
+    chars.forEach((ch, i) => g.fillText(ch, c.width / 2, c.height / 2 + (i - (chars.length - 1) / 2) * size));
+  } else {
+    g.font = `800 ${Math.min(c.height * 0.8, (c.width * 0.9) / [...text].length)}px "Shippori Mincho", serif`;
+    g.fillText(text, c.width / 2, c.height * 0.53);
+  }
+  const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  const geo = new THREE.PlaneGeometry(w * 0.95, h * 0.95);
+  const faces = twoSided ? [1, -1] : [1];
+  for (const f of faces) {
+    const l = new THREE.Mesh(geo, mat);
+    l.position.set(x + Math.sin(ry) * 0.035 * f, y, z + Math.cos(ry) * 0.035 * f);
+    l.rotation.y = f > 0 ? ry : ry + Math.PI;
+    scene.add(l);
+    noEdges.add(l);
+  }
+}
+
 // a signpost at the crossroads with painted boards
 function signpost(scene, B, x, z, signs) {
   const y = heightAt(x, z);
@@ -490,24 +522,89 @@ function signpost(scene, B, x, z, signs) {
     const h = y + 1.9 - i * 0.42;
     const [cx, cz] = [x + Math.sin(ang) * 0.5, z + Math.cos(ang) * 0.5];
     B.put(GEO.box, MAT.plaster, cx, h, cz, 0, ang + Math.PI / 2, 0, 1.0, 0.3, 0.05);
-    const c = document.createElement('canvas');
-    c.width = 256; c.height = 72;
-    const g = c.getContext('2d');
-    g.fillStyle = '#161514';
-    g.font = '800 54px "Shippori Mincho", serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(text, 128, 38);
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.27), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, side: THREE.DoubleSide, depthWrite: false }));
-    label.position.set(cx + Math.cos(ang) * 0.035, h, cz - Math.sin(ang) * 0.035);
-    label.rotation.y = ang + Math.PI / 2;
-    // double-sided: nudge off both faces
-    const back = label.clone();
-    back.position.set(cx - Math.cos(ang) * 0.035, h, cz + Math.sin(ang) * 0.035);
-    for (const l of [label, back]) { scene.add(l); noEdges.add(l); }
+    inkLabel(scene, text, cx, h, cz, ang + Math.PI / 2, 1.0, 0.28, { twoSided: true });
   });
   addCircle(x, z, 0.2);
   take(x, z, 1.2);
+}
+
+// the dojo: a long hall on a stone base, open at the front onto a veranda, with a
+// tiled gable roof, its name board over the door, and a rack of wooden practice swords
+function dojo(scene, B, x, z, ry) {
+  const y = heightAt(x, z) - 0.15;
+  const p = new THREE.Matrix4().compose(v1.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), v2.set(1, 1, 1));
+  const W = 9, D = 6.4, H = 2.8, F = 0.65; // F: floor height
+  B.put(GEO.box, MAT.stoneDark, 0, F / 2, 0, 0, 0, 0, W + 0.6, F, D + 0.4, p);
+  B.put(GEO.box, MAT.wood, 0, F + 0.06, D / 2 + 0.7, 0, 0, 0, W + 0.6, 0.12, 1.4, p); // veranda
+  B.put(GEO.box, MAT.stoneDark, 0, 0.2, D / 2 + 1.75, 0, 0, 0, 2.4, 0.4, 0.7, p); // step
+  // the hall: plaster sides and back, the front open between dark posts
+  B.put(GEO.box, MAT.plaster, 0, F + H / 2, -0.3, 0, 0, 0, W, H, D - 0.6, p);
+  B.put(GEO.box, MAT.woodDark, 0, F + 1.1, D / 2 - 0.58, 0, 0, 0, 3.4, 2.2, 0.04, p); // the dark interior through the doorway
+  for (const s of [-1, 1]) {
+    // shoji either side of the doorway
+    B.put(GEO.box, MAT.plaster, s * 2.85, F + 1.1, D / 2 - 0.56, 0, 0, 0, 2.3, 2.2, 0.06, p);
+    for (let k = 0; k < 3; k++) B.put(GEO.box, MAT.woodDark, s * (1.95 + k * 0.9), F + 1.1, D / 2 - 0.52, 0, 0, 0, 0.05, 2.2, 0.05, p);
+    B.put(GEO.box, MAT.woodDark, s * 2.85, F + 1.5, D / 2 - 0.52, 0, 0, 0, 2.3, 0.05, 0.05, p);
+  }
+  for (let i = 0; i <= 4; i++) {
+    const sx = -W / 2 + (W * i) / 4;
+    B.put(GEO.box, MAT.woodDark, sx, F + H / 2, D / 2 + 1.3, 0, 0, 0, 0.2, H, 0.2, p); // veranda posts
+    B.put(GEO.box, MAT.woodDark, sx, F + H / 2, -D / 2 + 0.02, 0, 0, 0, 0.2, H, 0.08, p);
+  }
+  B.put(GEO.box, MAT.woodDark, 0, F + H, D / 2 + 1.3, 0, 0, 0, W + 0.2, 0.22, 0.24, p); // beam over the veranda
+  B.put(GEO.box, MAT.woodDark, 0, F + H, -0.3, 0, 0, 0, W + 0.1, 0.2, D - 0.5, p);
+  // a deep gabled roof of tiles with flared eaves, wide enough to cover the veranda
+  for (const s of [-1, 1]) {
+    B.put(GEO.box, MAT.tile, 0, F + H + 1.05, s * 2.0 + 0.35, s * 0.5, 0, 0, W + 1.8, 0.24, 4.9, p);
+    B.put(GEO.box, MAT.tile, 0, F + H + 0.3, s * 4.25 + 0.35, s * 0.22, 0, 0, W + 2.0, 0.16, 1.0, p);
+  }
+  B.put(GEO.box, MAT.woodDark, 0, F + H + 2.15, 0.35, 0, 0, 0, W + 2.0, 0.32, 0.38, p); // ridge
+  for (const s of [-1, 1]) B.put(GEO.box, MAT.woodDark, s * (W / 2 + 1.0), F + H + 2.35, 0.35, 0, 0, s * 0.5, 0.15, 0.7, 0.15, p);
+  // the name board over the door
+  B.put(GEO.box, MAT.woodDark, 0, F + 2.35, D / 2 + 1.42, 0, 0, 0, 2.1, 0.9, 0.06, p);
+  B.put(GEO.box, MAT.plaster, 0, F + 2.35, D / 2 + 1.46, 0, 0, 0, 1.9, 0.74, 0.04, p);
+  v1.set(0, F + 2.35, D / 2 + 1.5).applyMatrix4(p);
+  inkLabel(scene, '道場', v1.x, v1.y, v1.z, ry, 1.9, 0.74);
+  // a rack of bokken by the steps, and a straw-wrapped striking post
+  const rx = W / 2 - 0.4, rz = D / 2 + 2.6;
+  for (const s of [-1, 1]) B.put(GEO.box, MAT.woodDark, rx + s * 0.7, 0.55, rz, 0, 0, 0, 0.1, 1.1, 0.1, p);
+  B.put(GEO.box, MAT.woodDark, rx, 1.0, rz, 0, 0, 0, 1.6, 0.08, 0.1, p);
+  for (let k = 0; k < 4; k++) B.put(GEO.box, MAT.wood, rx - 0.5 + k * 0.33, 0.55, rz + 0.12, -0.18, 0, 0, 0.05, 1.05, 0.05, p);
+  B.put(GEO.pole, MAT.woodDark, -rx, 0.8, rz, 0, 0, 0.04, 0.09, 1.6, 0.09, p);
+  B.put(GEO.pole, MAT.thatch, -rx, 1.15, rz, 0, 0, 0.04, 0.16, 0.5, 0.16, p);
+  for (const [lx, lz] of [[rx, rz], [-rx, rz]]) {
+    v1.set(lx, 0, lz).applyMatrix4(p);
+    addCircle(v1.x, v1.z, 0.6);
+  }
+  for (let i = 0; i < 5; i++) {
+    v1.set(-W / 2 + 0.8 + (i * (W - 1.6)) / 4, 0, 0.3).applyMatrix4(p);
+    addCircle(v1.x, v1.z, D / 2 + 0.5);
+  }
+  take(x, z, 8.5);
+}
+
+// a wayside shrine: a little roofed hokora on a stone plinth behind a small torii
+function hokora(scene, B, x, z, ry) {
+  const y = heightAt(x, z);
+  const p = new THREE.Matrix4().compose(v1.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), v2.set(1, 1, 1));
+  B.put(GEO.box, MAT.stoneDark, 0, 0.25, 0, 0, 0, 0, 2.0, 0.5, 1.7, p);
+  B.put(GEO.box, MAT.stone, 0, 0.62, 0, 0, 0, 0, 1.5, 0.24, 1.25, p);
+  B.put(GEO.box, MAT.wood, 0, 1.22, -0.05, 0, 0, 0, 1.0, 0.96, 0.8, p);
+  B.put(GEO.box, MAT.woodDark, 0, 1.15, 0.36, 0, 0, 0, 0.5, 0.7, 0.04, p); // its little doors
+  for (const s of [-1, 1]) B.put(GEO.box, MAT.tile, 0, 1.9, s * 0.36 - 0.05, s * 0.6, 0, 0, 1.5, 0.1, 0.95, p);
+  B.put(GEO.box, MAT.woodDark, 0, 2.17, -0.05, 0, 0, 0, 1.55, 0.12, 0.14, p);
+  // offerings: a red bib on a fox, a cup, a paper streamer
+  B.put(GEO.box, MAT.red, 0, 0.82, 0.62, 0, 0, 0, 0.6, 0.16, 0.22, p);
+  B.put(GEO.cyl6, MAT.plaster, -0.45, 0.82, 0.6, 0, 0, 0, 0.09, 0.14, 0.09, p);
+  B.put(GEO.box, MAT.plaster, 0.3, 1.62, 0.4, 0, 0, 0.15, 0.1, 0.36, 0.01, p);
+  v1.set(0, 0, 0).applyMatrix4(p);
+  addCircle(v1.x, v1.z, 1.2);
+  take(x, z, 2.5);
+  const [tx, tz] = rotXZ(x, z, ry, 0, 3.6);
+  torii(B, tx, tz, ry, 0.45);
+  for (const s of [-1, 1]) lantern(B, ...rotXZ(x, z, ry, s * 1.9, 1.2), ry);
+  jizo(B, ...rotXZ(x, z, ry, -1.6, -0.6), ry);
+  weepingCherry(B, ...rotXZ(x, z, ry, 1.0, -4.2), 1.15);
 }
 
 // ---------- the whole valley ----------
@@ -531,7 +628,7 @@ export function buildWorld(scene) {
   }
   // stepping stones where the footpath fords the stream
   {
-    const fp = roadCurves[3].curve;
+    const fp = roadCurves[1].curve;
     let bw = { w: 0, t: 0 };
     for (let i = 0; i <= 300; i++) {
       const t = i / 300, pt = fp.getPointAt(t);
@@ -554,12 +651,26 @@ export function buildWorld(scene) {
   weepingCherry(B, shx - 9, shz + 2, 1.5);
   weepingCherry(B, shx + 10, shz + 1, 1.4);
 
-  // the inn on the west road, with a bamboo grove behind it
-  const [ix, iz] = CLEARINGS.inn;
-  inn(B, ix - 2, iz - 2, Math.PI / 2 + 0.25);
-  bambooGrove(B, ix - 14, iz - 4, 7, 70);
-  fence(B, [[ix + 3, iz + 9], [ix + 0, iz + 10.5], [ix - 3, iz + 11], [ix - 6, iz + 10.5], [ix - 9, iz + 9]], { gap: 0 });
-  lantern(B, ix + 5, iz - 4, 0);
+  // the stops beside the main road: the inn, the dojo by the crossroads, the wayside shrine past the bridge
+  {
+    const I = STOPS.inn;
+    inn(B, I.x, I.z, I.ry);
+    // a hanging board by the door with the inn's character
+    const [bx, bz] = rotXZ(I.x, I.z, I.ry, -3.0, 2.84);
+    const by = heightAt(I.x, I.z) + 2.05;
+    B.put(GEO.box, MAT.plaster, bx, by, bz, 0, I.ry, 0, 0.55, 0.95, 0.06);
+    const [lx, lz] = rotXZ(I.x, I.z, I.ry, -3.0, 2.88);
+    inkLabel(scene, '宿', lx, by, lz, I.ry, 0.5, 0.9, { vertical: true });
+    bambooGrove(B, ...rotXZ(I.x, I.z, I.ry, 0, -10), 6, 60);
+    fence(B, [rotXZ(I.x, I.z, I.ry, 5, 4), rotXZ(I.x, I.z, I.ry, 6.5, 0), rotXZ(I.x, I.z, I.ry, 6, -4.5)], { gap: 0 });
+    lantern(B, ...rotXZ(I.x, I.z, I.ry, -3.6, 6.2), I.ry);
+    const D = STOPS.dojo;
+    dojo(scene, B, D.x, D.z, D.ry);
+    lantern(B, ...rotXZ(D.x, D.z, D.ry, -3.2, 6.6), D.ry);
+    lantern(B, ...rotXZ(D.x, D.z, D.ry, 3.2, 6.6), D.ry);
+    const S = STOPS.shrine;
+    hokora(scene, B, S.x, S.z, S.ry);
+  }
 
   // the lookout: a great cherry over an open clearing ringed with stones
   const [lx, lz, lr] = CLEARINGS.lookout;
@@ -582,16 +693,16 @@ export function buildWorld(scene) {
   // crossroads: signpost and a row of jizo
   {
     const pt = main.getPointAt(0.48);
-    signpost(scene, B, pt.x + 2.6, pt.z + 3, [['宿 ←', 0], ['社 ↑', Math.PI / 2], ['見晴 →', 0]]);
+    signpost(scene, B, pt.x + 2.6, pt.z + 3, [['小道 ←', 0], ['社 ↑', Math.PI / 2], ['見晴 →', 0]]);
     for (let i = 0; i < 3; i++) jizo(B, pt.x - 3.4, pt.z + 4 + i * 0.7, Math.PI / 2);
   }
 
   // fences along stretches of the main road and the east road
-  fence(B, roadFence(main, 0.04, 0.15, 1, 2.6));
-  fence(B, roadFence(main, 0.07, 0.17, -1, 2.6));
-  fence(B, roadFence(main, 0.33, 0.42, 1, 2.4));
+  fence(B, roadFence(main, 0.02, 0.08, 1, 2.6));
+  fence(B, roadFence(main, 0.03, 0.08, -1, 2.6));
+  fence(B, roadFence(main, 0.33, 0.39, 1, 2.4));
   fence(B, roadFence(roadCurves[2].curve, 0.8, 0.95, 1, 2.0));
-  fence(B, roadFence(roadCurves[1].curve, 0.2, 0.55, -1, 2.0));
+  fence(B, roadFence(roadCurves[1].curve, 0.06, 0.22, 1, 1.8));
 
   // cherry trees lining the main road in pairs, then groves across the meadows
   for (let t = 0.05; t < 0.86; t += 0.045) {

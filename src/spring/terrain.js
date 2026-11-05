@@ -13,12 +13,10 @@ const MASK = 1024;
 export const ROADS = [
   // the main road: from the south gate, past the crossroads, over the bridge, up to the shrine
   { w: 3.4, pts: [[4, 104], [-2, 82], [6, 62], [2, 42], [-8, 24], [-6, 6], [4, -10], [8, -28], [2, -46], [-6, -62], [-4, -80], [0, -96]] },
-  // west to the inn
-  { w: 2.4, pts: [[-7, 18], [-22, 14], [-38, 20], [-52, 16], [-64, 6]] },
+  // a footpath that loops west from the crossroads, over the stepping stones, to the shrine steps
+  { w: 1.7, pts: [[-8, 16], [-24, 10], [-38, -2], [-43, -20], [-38, -40], [-24, -60], [-8, -74]] },
   // east to the lookout clearing
   { w: 2.2, pts: [[-5, 4], [12, 0], [30, 8], [46, 2], [62, 10]] },
-  // a footpath that loops from the inn north to the shrine steps
-  { w: 1.6, pts: [[-62, 2], [-58, -18], [-44, -40], [-26, -60], [-8, -74]] },
 ];
 export const STREAM = { w: 5, pts: [[-120, -18], [-90, -26], [-60, -14], [-30, -24], [-6, -30], [16, -22], [44, -34], [76, -24], [120, -32]] };
 
@@ -69,8 +67,28 @@ function blob(x, z, rad, color) {
   g.fillRect(toPx(x) - rad * pxPerM, toPx(z) - rad * pxPerM, rad * 2 * pxPerM, rad * 2 * pxPerM);
   g.globalCompositeOperation = 'source-over';
 }
-export const CLEARINGS = { lookout: [66, 12, 11], shrine: [0, -100, 10], inn: [-68, 4, 9], gate: [4, 106, 6] };
+// The stops sit right beside the main road, each facing it across a trodden yard.
+// t: how far along the road, side: -1 west / 1 east, off: from the middle of the road.
+// ry turns the building so its door (local +z) faces the road; door is where you stand to go in.
+function beside(t, side, off, depth) {
+  const c = roadCurves[0].curve, p = c.getPointAt(t), tan = c.getTangentAt(t);
+  const nx = -tan.z * side, nz = tan.x * side;
+  const x = p.x + nx * off, z = p.z + nz * off;
+  return { x, z, ry: Math.atan2(-nx, -nz), door: [x - nx * depth, z - nz * depth], road: [p.x, p.z] };
+}
+export const STOPS = {
+  inn: { kind: 'inn', name: 'Plum Hill Inn', ...beside(0.3, -1, 10, 4.4) },
+  dojo: { kind: 'dojo', name: 'Willow Dojo', ...beside(0.43, 1, 11, 5.4) },
+  shrine: { kind: 'shrine', name: 'Wayside Shrine', ...beside(0.7, 1, 7, 2.2) },
+};
+export const CLEARINGS = { lookout: [66, 12, 11], shrine: [0, -100, 10], gate: [4, 106, 6] };
 for (const [x, z, r] of Object.values(CLEARINGS)) blob(x, z, r, 'rgba(255,0,0,0.9)');
+// each stop's yard runs from the road to its door
+for (const s of Object.values(STOPS)) {
+  const r = s.kind === 'shrine' ? 3.5 : 5.5;
+  blob((s.door[0] + s.road[0]) / 2, (s.door[1] + s.road[1]) / 2, r, 'rgba(255,0,0,0.8)');
+  blob(s.x, s.z, r + 1, 'rgba(255,0,0,0.55)');
+}
 
 const pixels = g.getImageData(0, 0, MASK, MASK).data;
 export const maskTexture = new THREE.CanvasTexture(canvas);
@@ -106,7 +124,7 @@ function baseHeight(x, z) {
 // road: index into ROADS, t: how far along it. The arena radius is how far fighters may roam.
 export const ARENA_R = 13; // the combat prototype's clearing is 12
 export const DUEL_SPOTS = [
-  { id: 'ronin', road: 0, t: 0.24 },
+  { id: 'ronin', road: 0, t: 0.16 },
   { id: 'wanderer', road: 2, t: 0.5 },
   { id: 'spearman', road: 0, t: 0.78 },
 ].map((s) => {

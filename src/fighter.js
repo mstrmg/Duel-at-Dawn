@@ -225,7 +225,7 @@ export class Fighter {
     this.dodgeAt = this.game.time;
     const D = this.dodgeKind === 'step' ? STEP : DODGE;
     this.dodgeDist = D.dist;
-    this.spend(D.cost);
+    this.spend(D.cost * (this.def.dodgeCost ?? 1)); // dodgeCost: a technique's discount
     this.setState('dodge', D.time);
     this.game.events.emit('dodge', this);
     return true;
@@ -405,7 +405,7 @@ export class Fighter {
         if (this.t >= this.stateDuration) this.setState('iaiCharge');
         break;
       case 'iaiCharge':
-        this.iaiCharge = Math.min(1, this.iaiCharge + dt / IAI.chargeTime);
+        this.iaiCharge = Math.min(1, this.iaiCharge + dt / (IAI.chargeTime * (this.def.iaiCharge ?? 1)));
         this.breath -= IAI.drain * dt;
         this.regenDelay = BREATH.regenDelay;
         if (this.breath <= 0) { this.breath = 0; this.becomeWinded(); }
@@ -520,7 +520,7 @@ export class Fighter {
     if (this.state === 'idle') rate = this.moving ? BREATH.regenMove : BREATH.regenIdle;
     else if (this.state === 'block') rate = BREATH.regenBlock;
     else if (this.state === 'winded') rate = 22;
-    this.breath = Math.min(BREATH.max, this.breath + rate * dt);
+    this.breath = Math.min(BREATH.max, this.breath + rate * (this.def.breathRegen ?? 1) * dt);
   }
 
   updateFacing(dt) {

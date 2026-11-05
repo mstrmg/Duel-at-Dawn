@@ -51,7 +51,7 @@ export class Combat {
     }
 
     if (guarded) {
-      def.spend(BLOCK_COST[a.weaponKind] ?? 14);
+      def.spend((BLOCK_COST[a.weaponKind] ?? 14) * (def.def.blockCost ?? 1));
       def.shove(att, a.kind === 'shove' ? 4.5 : 2.2);
       // a blocked lunge has thrown its weight forward and takes longer to recover
       att.recoverExtra = a.move === 'lunge' ? 0.32 : 0.12;

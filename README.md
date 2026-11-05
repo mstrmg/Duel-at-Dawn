@@ -15,16 +15,23 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 ## The Spring map
 
-`spring.html` is a walkable Spring valley, separate from combat for now (open `/spring.html` under `npm run dev`). A dirt road runs north from the south gate past the crossroads, with the inn to the west and the lookout to the east, over a plank bridge, and up an avenue of stone lanterns to the shrine and its red torii. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
+`spring.html` is a walkable Spring valley, separate from combat for now (open `/spring.html` under `npm run dev`). A dirt road runs north from the south gate past the inn, through the crossroads (the dojo on the corner, the lookout road to the east, a footpath to the west), over a plank bridge, past a wayside shrine, and up an avenue of stone lanterns to the great shrine and its red torii. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
 
 WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock it, or drag), the arrow keys turn the camera, and the wheel sets its distance. Trees and buildings between the camera and the wanderer are cut away around him.
 
-Three fighters wait on the road: the Ronin on the main road before the crossroads, the Wandering Ronin on the lookout road, and the Spearman past the bridge. Each turns to watch you come. Walk within 10 m and a short cutscene plays (letterbox, a wide standoff, his face and title, you drawing, a gust of petals; Space, Enter or a click skips it), then the duel starts on a level patch of road 13 m across in radius, with the two of you 9 m apart as in the combat clearing. Win and you walk on (for now you walk on whole; wounds come later). Lose and you can rise again or go back to the gate.
+Three fighters wait on the road: the Ronin on the main road before the crossroads, the Wandering Ronin on the lookout road, and the Spearman past the bridge. Each turns to watch you come. Walk within 10 m and a short cutscene plays (letterbox, a wide standoff, his face and title, you drawing, a gust of petals; Space, Enter or a click skips it), then the duel starts on a level patch of road 13 m across in radius, with the two of you 9 m apart as in the combat clearing. Win and you take 25 銭 from his purse and walk on; whatever vitality you lost stays lost until you heal. Lose and you can rise again (as you were when the duel began) or go back to the gate.
+
+Three stops sit right beside the main road, each a few steps off it, facing it across a trodden yard. Walk up to the door and press E; 1 to 4 choose, Esc (or E) goes back out. The corner of the screen shows your vitality, coin, technique and blessing while you walk.
+
+- **Plum Hill Inn** (just past the first duel): rest the night for full vitality (15 銭), onigiri for +1 vitality (8 銭), straw sandals to walk and step 8% quicker (20 銭), a whetstone for +15 cm reach (25 銭). You start with 20 銭.
+- **Willow Dojo** (at the crossroads): learn one technique. Swift Draw charges the draw-cut a third faster, Iron Wrist makes blocking cost 40% less breath, Wind Step makes evades and steps cost a third less.
+- **Wayside Shrine** (past the bridge): one blessing. The Wind makes breath return 25% faster; the Petal adds one vitality and mends a wound.
 
 - `src/spring/terrain.js`: the height field, roads and stream (baked into one mask texture) and the ground shader
-- `src/spring/world.js`: trees, azaleas, wildflowers, rocks, fences, lanterns, bridge, inn, shrine and torii, merged per material; colliders
+- `src/spring/world.js`: trees, azaleas, wildflowers, rocks, fences, lanterns, bridge, inn, dojo, wayside shrine, great shrine and torii, merged per material; colliders
+- `src/spring/stops.js`: the run (coin, vitality, the wanderer's own stats) and what the inn, dojo and shrine offer
 - `src/spring/grass.js`: instanced ink grass that sways and thins with distance
-- `src/spring/main.js`: walking, collisions, the shoulder camera, place names, and starting and ending duels on the road
+- `src/spring/main.js`: walking, collisions, the shoulder camera, place names, going into the stops, and starting and ending duels on the road
 - `src/spring/cutscene.js`: the shots before a duel on the road
 - `src/duel.js`: one duel wherever it happens (event wiring, AI, hit-stop and slow-mo, reach arcs, the duel camera). Both pages use it
 
