@@ -14,6 +14,7 @@ import {
 import { tAtZ, TORII_RUN, BAMBOO } from './layout.js';
 import { PINK } from './palette.js';
 import { buildWater } from './water.js';
+import { roofGeometry, gableGeometry, roofHeight } from './roofs.js';
 
 export { PINK };
 
@@ -109,6 +110,24 @@ const GEO = {
   cyl6: new THREE.CylinderGeometry(1, 1, 1, 6),
   sphere: new THREE.SphereGeometry(1, 10, 8),
 };
+
+// A roof (see roofs.js) at (x, y, z) in a building's frame p, with its gable walls (at
+// ±gx, from yBase up) and a ridge cap. Returns the ridge height in the building's frame.
+function roof(B, p, mat, o, { x = 0, y = 0, z = 0, gable = null, gx = 0, ridge = MAT.woodDark, ridgeW = 0.3 } = {}) {
+  const m = new THREE.Matrix4().makeTranslation(x, y, z).premultiply(p);
+  B.add(roofGeometry(o), mat, m);
+  const curve = o.curve ?? 0.6, thick = o.thick ?? 0.2, t0 = o.t0 ?? 0, xh = o.xh ?? o.A;
+  if (gable) {
+    const yBase = t0 > 0 ? roofHeight(o.h, curve, t0) : 0;
+    for (const sx of [-1, 1]) {
+      const at = gx || (t0 > 0 ? xh - 0.06 : o.A - 0.3);
+      B.add(gableGeometry({ Bz: o.Bz, h: o.h, curve, thick, yBase, x: sx * at }), gable, m);
+    }
+  }
+  const top = o.h + (o.ribs ? (o.rib ?? 0.06) : 0);
+  if (ridge) B.put(GEO.box, ridge, 0, top + ridgeW * 0.3, 0, 0, 0, 0, 2 * xh + ridgeW, ridgeW, ridgeW * 1.2, m);
+  return y + top;
+}
 
 // ---------- colliders ----------
 // canopies: tree crowns the camera pulls in front of so they never block the view
@@ -431,13 +450,11 @@ function shrine(B, x, z, ry) {
   B.put(GEO.box, MAT.plaster, 0, 1.9, -0.2, 0, 0, 0, 5, 2.3, 3.8, p);
   B.put(GEO.box, MAT.woodDark, 0, 1.4, 1.7, 0, 0, 0, 1.8, 1.6, 0.1, p); // the doors
   B.put(GEO.box, MAT.woodDark, 0, 3.1, 0, 0, 0, 0, 5.6, 0.2, 4.6, p);
-  // a deep gabled roof with flared eaves
-  for (const s of [-1, 1]) {
-    B.put(GEO.box, MAT.tile, 0, 3.95, s * 1.6, s * 0.55, 0, 0, 7.4, 0.22, 4.0, p);
-    B.put(GEO.box, MAT.tile, 0, 3.32, s * 3.25, s * 0.25, 0, 0, 7.6, 0.16, 0.9, p);
-  }
-  B.put(GEO.box, MAT.woodDark, 0, 4.75, 0, 0, 0, 0, 7.6, 0.3, 0.35, p); // ridge
-  for (const s of [-1, 1]) B.put(GEO.box, MAT.woodDark, s * 3.8, 4.95, 0, 0, 0, s * 0.5, 0.15, 0.7, 0.15, p);
+  // a hip-and-gable roof of tiles, sagging to deep eaves that turn up at the corners
+  const xh = 2.3;
+  const top = roof(B, p, MAT.tile, { A: 4.0, Bz: 3.4, h: 2.3, xh, t0: 0.45, thick: 0.22, curve: 0.6, lift: 0.4, ribs: 0.3, rib: 0.07 },
+    { y: 2.78, z: -0.1, gable: MAT.woodDark, ridgeW: 0.38 });
+  for (const s of [-1, 1]) B.put(GEO.box, MAT.woodDark, s * (xh + 0.12), top + 0.32, -0.1, 0, 0, 0, 0.24, 0.46, 0.5, p); // the ridge ends
   // a red offering box and a hanging rope with a bell
   B.put(GEO.box, MAT.red, 0, 1.0, 2.9, 0, 0, 0, 1.2, 0.5, 0.5, p);
   B.put(GEO.pole, MAT.plaster, 0, 2.4, 2.4, 0, 0, 0, 0.05, 1.2, 0.05, p);
@@ -466,10 +483,10 @@ function inn(B, x, z, ry, { sign = true } = {}) {
   // sliding shoji doors and a noren curtain over the entrance
   B.put(GEO.box, MAT.woodDark, 0, 0.5 + 1.0, D / 2 + 0.05, 0, 0, 0, 2.2, 2.0, 0.05, p);
   for (const s of [-0.75, 0, 0.75]) B.put(GEO.box, MAT.plaster, s - 0.0, 0.5 + 1.95, D / 2 + 0.12, 0, 0, 0, 0.68, 0.7, 0.02, p);
-  // a thick thatched hip roof
-  B.put(GEO.cone4, MAT.thatch, 0, 0.5 + H + 1.35, 0, 0, Math.PI / 4, 0, W * 0.86, 2.9, D * 0.92, p);
-  B.put(GEO.box, MAT.thatch, 0, 0.5 + H + 0.18, 0, 0, 0, 0, W + 1.6, 0.36, D + 1.6, p);
-  B.put(GEO.box, MAT.woodDark, 0, 0.5 + H + 2.65, 0, 0, 0, 0, 2.4, 0.3, 0.4, p);
+  // a thick thatched roof, hipped below with a little smoke gable at each end, as a farmhouse
+  // has, and a capped ridge
+  roof(B, p, MAT.thatch, { A: W / 2 + 0.9, Bz: D / 2 + 0.9, h: 3.0, xh: 2.4, t0: 0.62, thick: 0.38, curve: 0.15 },
+    { y: 0.5 + H - 0.13, gable: MAT.woodDark, ridgeW: 0.45 });
   // a red paper lantern by the door: the inn's sign
   if (sign) {
     B.put(GEO.sphere, MAT.red, 1.6, 0.5 + 1.9, D / 2 + 0.5, 0, 0, 0, 0.26, 0.36, 0.26, p);
@@ -630,13 +647,11 @@ function dojo(scene, B, x, z, ry) {
   }
   B.put(GEO.box, MAT.woodDark, 0, F + H, D / 2 + 1.3, 0, 0, 0, W + 0.2, 0.22, 0.24, p); // beam over the veranda
   B.put(GEO.box, MAT.woodDark, 0, F + H, -0.3, 0, 0, 0, W + 0.1, 0.2, D - 0.5, p);
-  // a deep gabled roof of tiles with flared eaves, wide enough to cover the veranda
-  for (const s of [-1, 1]) {
-    B.put(GEO.box, MAT.tile, 0, F + H + 1.05, s * 2.0 + 0.35, s * 0.5, 0, 0, W + 1.8, 0.24, 4.9, p);
-    B.put(GEO.box, MAT.tile, 0, F + H + 0.3, s * 4.25 + 0.35, s * 0.22, 0, 0, W + 2.0, 0.16, 1.0, p);
-  }
-  B.put(GEO.box, MAT.woodDark, 0, F + H + 2.15, 0.35, 0, 0, 0, W + 2.0, 0.32, 0.38, p); // ridge
-  for (const s of [-1, 1]) B.put(GEO.box, MAT.woodDark, s * (W / 2 + 1.0), F + H + 2.35, 0.35, 0, 0, s * 0.5, 0.15, 0.7, 0.15, p);
+  // a hip-and-gable roof of tiles over the hall and the veranda, its eaves turning up
+  const xh = 3.2;
+  const top = roof(B, p, MAT.tile, { A: W / 2 + 0.9, Bz: 4.6, h: 2.3, xh, t0: 0.5, thick: 0.22, curve: 0.6, lift: 0.3, ribs: 0.34, rib: 0.07 },
+    { y: F + H + 0.15, z: 0.65, gable: MAT.woodDark, ridgeW: 0.36 });
+  for (const s of [-1, 1]) B.put(GEO.box, MAT.woodDark, s * (xh + 0.12), top + 0.3, 0.65, 0, 0, 0, 0.22, 0.42, 0.46, p); // the ridge ends
   // the name board over the door
   B.put(GEO.box, MAT.woodDark, 0, F + 2.35, D / 2 + 1.42, 0, 0, 0, 2.1, 0.9, 0.06, p);
   B.put(GEO.box, MAT.plaster, 0, F + 2.35, D / 2 + 1.46, 0, 0, 0, 1.9, 0.74, 0.04, p);
@@ -668,8 +683,8 @@ function hokora(scene, B, x, z, ry, { torii: withTorii = true } = {}) {
   B.put(GEO.box, MAT.stone, 0, 0.62, 0, 0, 0, 0, 1.5, 0.24, 1.25, p);
   B.put(GEO.box, MAT.wood, 0, 1.22, -0.05, 0, 0, 0, 1.0, 0.96, 0.8, p);
   B.put(GEO.box, MAT.woodDark, 0, 1.15, 0.36, 0, 0, 0, 0.5, 0.7, 0.04, p); // its little doors
-  for (const s of [-1, 1]) B.put(GEO.box, MAT.tile, 0, 1.9, s * 0.36 - 0.05, s * 0.6, 0, 0, 1.5, 0.1, 0.95, p);
-  B.put(GEO.box, MAT.woodDark, 0, 2.17, -0.05, 0, 0, 0, 1.55, 0.12, 0.14, p);
+  roof(B, p, MAT.tile, { A: 0.75, Bz: 0.62, h: 0.42, thick: 0.08, curve: 0.5, lift: 0.06 },
+    { y: 1.69, z: -0.05, gable: MAT.wood, gx: 0.5, ridgeW: 0.12 });
   // offerings: a red bib on a fox, a cup, a paper streamer
   B.put(GEO.box, MAT.red, 0, 0.82, 0.62, 0, 0, 0, 0.6, 0.16, 0.22, p);
   B.put(GEO.cyl6, MAT.plaster, -0.45, 0.82, 0.6, 0, 0, 0, 0.09, 0.14, 0.09, p);
@@ -704,9 +719,9 @@ function teahouse(scene, B, x, z, ry) {
   B.put(GEO.sphere, MAT.woodDark, 1.4, F + 0.75, -1.2, 0, 0, 0, 0.3, 0.25, 0.3, p);
   B.put(GEO.box, MAT.wood, -1.6, F + 1.3, -D / 2 + 0.35, 0, 0, 0, 2.2, 0.08, 0.35, p);
   for (let k = 0; k < 6; k++) B.put(GEO.cyl6, MAT.plaster, -2.5 + k * 0.36, F + 1.42, -D / 2 + 0.35, 0, 0, 0, 0.07, 0.14, 0.07, p);
-  // a shingled gable roof
-  for (const sd of [-1, 1]) B.put(GEO.box, MAT.tile, 0, F + H + 0.75, sd * 1.35, sd * 0.5, 0, 0, W + 1.4, 0.18, 3.4, p);
-  B.put(GEO.box, MAT.woodDark, 0, F + H + 1.5, 0, 0, 0, 0, W + 1.5, 0.24, 0.3, p);
+  // a shingled gable roof, its gable ends closed in plaster
+  roof(B, p, MAT.tile, { A: W / 2 + 0.7, Bz: D / 2 + 0.8, h: 1.7, thick: 0.16, curve: 0.35, lift: 0.08, ribs: 0.3, rib: 0.04 },
+    { y: F + H - 0.18, gable: MAT.plaster, gx: W / 2 - 0.1, ridgeW: 0.26 });
   // noren over the front and the board
   for (const sx of [-0.9, 0, 0.9]) B.put(GEO.box, MAT.plaster, sx, F + H - 0.35, D / 2 + 0.02, 0, 0, 0, 0.82, 0.6, 0.02, p);
   B.put(GEO.box, MAT.plaster, -W / 2 - 0.2, 1.2, D / 2 + 0.6, 0, 0, 0, 0.5, 1.2, 0.08, p);
@@ -750,7 +765,7 @@ function onsen(scene, B, x, z, ry) {
   for (const sx of [-1.7, 0, 1.7]) B.put(GEO.box, MAT.woodDark, sx, 1.3, 1.52, 0, 0, 0, 0.14, 2.2, 0.06, hp);
   B.put(GEO.box, MAT.woodDark, 0, 1.15, 1.52, 0, 0, 0, 1.2, 1.9, 0.05, hp);
   for (const sx of [-0.3, 0.3]) B.put(GEO.box, MAT.plaster, sx, 2.0, 1.58, 0, 0, 0, 0.55, 0.6, 0.02, hp);
-  for (const sd of [-1, 1]) B.put(GEO.box, MAT.thatch, 0, 2.75, sd * 0.95, sd * 0.55, 0, 0, 4.0, 0.3, 2.3, hp);
+  roof(B, hp, MAT.thatch, { A: 2.3, Bz: 2.1, h: 1.5, thick: 0.3, curve: 0.1 }, { y: 2.3, gable: MAT.wood, gx: 1.68, ridgeW: 0.3 });
   v1.set(0, 0, 0).applyMatrix4(hp);
   addCircle(v1.x, v1.z, 2.1);
   // a bamboo screen on the far side of the pool
