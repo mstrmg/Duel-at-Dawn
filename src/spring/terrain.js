@@ -171,12 +171,43 @@ for (const s of Object.values(STOPS)) {
   if (s.kind !== 'onsen') blob(s.x, s.z, r + 1, 'rgba(255,0,0,0.55)');
 }
 
-// level pads: ground that is flattened to one height, blending out to the hills around
-const PADS = [
+// level pads: ground that is flattened to one height, blending out to the hills around.
+// Later pads win where they overlap, so the ambush spots go first: a duel, a stop or the
+// shrine always keeps its own level ground, and an ambush pad takes the height the ground
+// already has there, so it never lifts or sinks a neighbouring clearing.
+const CLEARING_PADS = [
   ...DUEL_SPOTS.map((s) => ({ x: s.x, z: s.z, y: s.y, r0: ARENA_R + 2, r1: ARENA_R + 8 })),
-  ...AMBUSH_SPOTS.map((s) => ({ x: s.x, z: s.z, y: s.y, r0: ARENA_R, r1: ARENA_R + 7 })),
   ...Object.values(STOPS).map((s) => ({ x: s.x, z: s.z, y: s.y - 0.05, r0: s.size, r1: s.size + 7 })),
   { x: SHRINE.x, z: SHRINE.z - 6, y: baseHeight(SHRINE.x, SHRINE.z) - 0.1, r0: SHRINE.r + 6, r1: SHRINE.r + 16 },
+];
+function padHeight(pads, x, z, h) {
+  for (const p of pads) {
+    const d = Math.hypot(x - p.x, z - p.z);
+    if (d < p.r1) h += (p.y - h) * (1 - smooth(p.r0, p.r1, d));
+  }
+  return h;
+}
+// The pool under the falls lies in a level hollow cut back into the hillside, its water a
+// little below the lowest ground round its rim, so it never stands proud of the slope or
+// of the path below it; the cliff rises behind.
+const FALLS_LEVEL = (() => {
+  let low = Infinity;
+  for (let a = 0; a < Math.PI * 2; a += 0.1) {
+    const x = FALLS.x + Math.cos(a) * (FALLS.pool + 2), z = FALLS.z + Math.sin(a) * (FALLS.pool + 2);
+    low = Math.min(low, padHeight(CLEARING_PADS, x, z, baseHeight(x, z)));
+  }
+  return low - 0.45;
+})();
+// last, and kept tight, so its rim stays whole and the bank below it ends before the
+// Yamabushi's ground begins
+const CORE_PADS = [
+  ...CLEARING_PADS,
+  { x: FALLS.x, z: FALLS.z, y: FALLS_LEVEL + 0.45, r0: FALLS.pool + 2, r1: FALLS.pool + 4.5 },
+];
+for (const s of AMBUSH_SPOTS) s.y = padHeight(CORE_PADS, s.x, s.z, baseHeight(s.x, s.z) - 0.12);
+const PADS = [
+  ...AMBUSH_SPOTS.map((s) => ({ x: s.x, z: s.z, y: s.y, r0: ARENA_R, r1: ARENA_R + 7 })),
+  ...CORE_PADS,
 ];
 // the hot spring's pool: a bowl of steaming water by its bathhouse
 export const POOL = (() => {
@@ -184,7 +215,7 @@ export const POOL = (() => {
   return { x: s.x, z: s.z, r: 3.6, level: s.y - 0.3, steam: true };
 })();
 // the pool under the waterfall on the waterfall path, with a cliff standing round its far side
-export const FALLS_POOL = { x: FALLS.x, z: FALLS.z, r: FALLS.pool, level: baseHeight(FALLS.x, FALLS.z) - 0.5, cliff: 9 };
+export const FALLS_POOL = { x: FALLS.x, z: FALLS.z, r: FALLS.pool, level: FALLS_LEVEL, cliff: 9 };
 export const POOLS = [POOL, FALLS_POOL];
 // the cliff: a horseshoe of rock round the west side of the falls pool
 function cliffAt(x, z) {
@@ -227,10 +258,7 @@ export function waterLevelAt(x, z) {
 export function heightAt(x, z) {
   let h = baseHeight(x, z);
   h -= roadAt(x, z) * 0.12; // a road is worn a little below the grass
-  for (const p of PADS) {
-    const d = Math.hypot(x - p.x, z - p.z);
-    if (d < p.r1) h += (p.y - h) * (1 - smooth(p.r0, p.r1, d));
-  }
+  h = padHeight(PADS, x, z, h);
   // the river's channel: a rounded bed, and banks that slope up to the meadow
   const r = riverAt(x, z);
   if (r) {

@@ -67,14 +67,14 @@ export const DUEL_PLAN = [
 // Predetermined spots where an ambusher may lie in wait, off one side of the road (side);
 // every journey a few of them are taken at random (see AMBUSH_COUNT).
 export const AMBUSH_PLAN = [
-  { z: 62, side: 1 },
-  { z: -170, side: -1 },
-  { z: -230, side: 1 },
+  { z: -4, side: -1 },
+  { z: -178, side: -1 },
+  { z: -224, side: 1 },
   { road: 1, t: 0.3, side: -1 },
   { road: 1, t: 0.74, side: 1 },
   { road: 3, t: 0.22, side: 1 },
   { road: 3, t: 0.8, side: -1 },
-  { road: 4, t: 0.12, side: -1 },
+  { road: 4, t: 0.2, side: -1 },
   { road: 4, t: 0.8, side: 1 },
 ];
 export const AMBUSH_COUNT = 5;

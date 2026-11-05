@@ -255,12 +255,19 @@ class Waterfall {
     const top = heightAt(F.x - F.r - 3.2, F.z) - 0.1;
     const bottom = F.level;
     const H = top - bottom, W = 3.2;
-    const g = new THREE.PlaneGeometry(W, H, 1, 12);
-    // a slight bow outward at the top, as water leaves the lip
+    const g = new THREE.PlaneGeometry(W, H, 4, 24);
+    // The sheet hugs the cliff: each row sits a hand's breadth out from the rock at its own
+    // height, so the water runs down the face instead of hanging in the air in front of it.
+    const faceX = (y, z) => {
+      for (let x = F.x - F.r; x > F.x - F.r - 8; x -= 0.05) if (heightAt(x, z) >= y) return x;
+      return F.x - F.r - 8;
+    };
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const v = (p.getY(i) + H / 2) / H;
-      p.setZ(i, v * v * 0.9);
+      const y = bottom + v * H, z = F.z - p.getX(i);
+      const lip = Math.max(0, (v - 0.9) / 0.1); // it leaves the lip with a slight bow
+      p.setXYZ(i, faceX(y, z) + 0.25 + lip * lip * 0.35, y, z);
     }
     g.computeVertexNormals();
     this.mat = new THREE.ShaderMaterial({
@@ -296,8 +303,6 @@ class Waterfall {
       transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
     });
     const m = new THREE.Mesh(g, this.mat);
-    m.position.set(F.x - F.r - 0.7, bottom + H / 2, F.z);
-    m.rotation.y = Math.PI / 2; // facing east, out over the pool
     scene.add(m);
     noEdges.add(m);
     // spray where it lands

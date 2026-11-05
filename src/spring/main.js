@@ -167,6 +167,40 @@ class Petals {
   }
 }
 
+// Push a point (radius R) out of the trees, posts, walls and thickets. A few passes, so
+// standing in the crook between two of them settles instead of being shoved back and forth.
+function pushOut(p, R) {
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const c of colliders.circles) {
+      const dx = p.x - c.x, dz = p.z - c.z;
+      const min = c.r + R;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < min * min && d2 > 1e-6) {
+        const d = Math.sqrt(d2);
+        p.x = c.x + (dx / d) * min;
+        p.z = c.z + (dz / d) * min;
+        moved = true;
+      }
+    }
+    for (const s of colliders.segments) {
+      const ex = s.bx - s.ax, ez = s.bz - s.az;
+      const t = THREE.MathUtils.clamp(((p.x - s.ax) * ex + (p.z - s.az) * ez) / (ex * ex + ez * ez), 0, 1);
+      const cx = s.ax + ex * t, cz = s.az + ez * t;
+      const dx = p.x - cx, dz = p.z - cz;
+      const min = s.r + R;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < min * min && d2 > 1e-6) {
+        const d = Math.sqrt(d2);
+        p.x = cx + (dx / d) * min;
+        p.z = cz + (dz / d) * min;
+        moved = true;
+      }
+    }
+    if (!moved) return;
+  }
+}
+
 class SpringMap {
   constructor() {
     const canvas = document.getElementById('game');
@@ -378,30 +412,7 @@ class SpringMap {
 
   collide() {
     const p = this.pos;
-    const R = 0.35;
-    for (const c of colliders.circles) {
-      const dx = p.x - c.x, dz = p.z - c.z;
-      const min = c.r + R;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < min * min && d2 > 1e-6) {
-        const d = Math.sqrt(d2);
-        p.x = c.x + (dx / d) * min;
-        p.z = c.z + (dz / d) * min;
-      }
-    }
-    for (const s of colliders.segments) {
-      const ex = s.bx - s.ax, ez = s.bz - s.az;
-      const t = THREE.MathUtils.clamp(((p.x - s.ax) * ex + (p.z - s.az) * ez) / (ex * ex + ez * ez), 0, 1);
-      const cx = s.ax + ex * t, cz = s.az + ez * t;
-      const dx = p.x - cx, dz = p.z - cz;
-      const min = s.r + R;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < min * min && d2 > 1e-6) {
-        const d = Math.sqrt(d2);
-        p.x = cx + (dx / d) * min;
-        p.z = cz + (dz / d) * min;
-      }
-    }
+    pushOut(p, 0.35);
     // the stream: only crossable at the bridge and the stepping stones
     if (waterAt(p.x, p.z) > 0.5) {
       const onFord = colliders.fords.some((f) => {
@@ -712,7 +723,10 @@ class SpringMap {
       squareUp(this, foe);
     }
     this.fx.groundY = spot.y;
-    this.stage.start(p, f, foe.AI, { arena: { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y }, intro: placed && !announce ? 0.6 : 1.6, announce });
+    this.fx.groundAt = heightAt;
+    // the duel is fought on the ground as it lies, round the trees and posts that stand there
+    const arena = { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y, groundAt: heightAt, collide: pushOut };
+    this.stage.start(p, f, foe.AI, { arena, intro: placed && !announce ? 0.6 : 1.6, announce });
     this.stage.updateCamera(10); // cut straight to the shoulder shot
   }
 
@@ -817,7 +831,9 @@ class SpringMap {
       const dx = at.x - s.x, dz = at.z - s.z, r = Math.hypot(dx, dz) || 1;
       if (r < CHALLENGE_DIST + 1.5) this.pos.set(s.x + (dx / r) * (CHALLENGE_DIST + 1.5), 0, s.z + (dz / r) * (CHALLENGE_DIST + 1.5));
     }
+    this.pos.y = heightAt(this.pos.x, this.pos.z); // already standing on the ground, not settling onto it
     this.lastPos.copy(this.pos);
+    this.vel.set(0, 0, 0);
     this.yaw = p.yaw;
     this.camYaw = p.yaw;
     p.reset();
@@ -928,3 +944,5 @@ class SpringMap {
 }
 
 window.springMap = new SpringMap();
+// for tests and tinkering in the console
+window.springMap.terrain = { heightAt, waterAt, colliders, DUEL_SPOTS, AMBUSH_SPOTS, STOPS, FALLS_POOL, ARENA_R };

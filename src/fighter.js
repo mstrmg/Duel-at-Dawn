@@ -647,7 +647,9 @@ export class Fighter {
     const dx = this.pos.x - ax, dz = this.pos.z - az;
     const r = Math.hypot(dx, dz);
     if (r > ar) this.pos.set(ax + (dx * ar) / r, 0, az + (dz * ar) / r);
-    this.pos.y = A?.y ?? 0;
+    // out of anything standing on it, then on the ground as it lies (or the level clearing)
+    if (A?.collide) A.collide(this.pos, this.def.radius);
+    this.pos.y = A?.groundAt ? A.groundAt(this.pos.x, this.pos.z) : A?.y ?? 0;
   }
 
   updateBreath(dt) {
