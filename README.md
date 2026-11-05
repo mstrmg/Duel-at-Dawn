@@ -15,7 +15,7 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 ## The Spring map
 
-`spring.html` is the Spring region, separate from combat for now (open `/spring.html` under `npm run dev`). It is finished except for the boss: a long valley, about 560 m from the south gate to the great shrine, with eight fighters, nine stops, two side paths and ambushers on the way. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
+`spring.html` is the Spring region, separate from combat for now (open `/spring.html` under `npm run dev`). It is finished, boss included: a long valley, about 560 m from the south gate to the great shrine, with eight fighters, nine stops, two side paths and ambushers on the way. Cherry trees, azaleas, wildflowers and drifting petals are pink, Spring's accent color.
 
 The road, south to north:
 
@@ -25,7 +25,7 @@ The road, south to north:
 4. **The Hot Spring** beside the road, steaming in its ring of stones by a little bathhouse.
 5. **The bamboo forest**: **the Dice Player's Tarp**, **the Bamboo Bandit**, and **the Bamboo Teahouse** at the far edge.
 6. **The climb**: pines, rock and switchbacks. Past the teahouse **the waterfall path** (signposted 滝) leaves the road west, round **the falls** (water off a horseshoe of rock into a pool, a sacred rope across the lip) where **the Yamabushi**, a mountain ascetic with a spear, keeps watch, past **the Waterfall Shrine**, and back to the road below the torii. On the road: **Cliffside Dojo**, then **the Masked Duelist** (elite), then **the Fox Shrine**.
-7. **The thousand torii**: a red tunnel of gates with **the Temple Guard** (elite, a warrior monk with a long spear) before it, and at its end **the Shrine of the Petal Blade**, whose forecourt is where the boss will wait.
+7. **The thousand torii**: a red tunnel of gates with **the Temple Guard** (elite, a warrior monk with a long spear) before it, and at its end **the Shrine of the Petal Blade**, whose forecourt is where **the Petal Blade** waits (see below).
 
 WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock it, or drag), the arrow keys turn the camera, and the wheel sets its distance. Trees and buildings between the camera and the wanderer are cut away around him. **M** opens the road map: the valley unrolled as a sideways scroll, read right to left, with every stop, every fighter (a red slash waiting, a red cross for an elite, a grey cross once beaten) and an arrow for you.
 
@@ -44,6 +44,10 @@ WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock 
 - **The Dice Player**: odd or even for 10 or 25 銭; win and he pays double (you always call even). Three rolls and he has had enough of you.
 - **Bamboo Teahouse**: tea and dango mend your oldest wound (6 銭), a nap mends them all (18 銭), and two charms.
 - **Shrine of the Petal Blade**: the end of the road for now. It shows what you carry and offers a new journey.
+
+### The boss: the Petal Blade
+
+He took Spring's color, and the duel is a tug of war over it. The bar under his name shows the color still in the forecourt's cherries (pink) against what he holds (striped rose). While he holds a quarter or more, petals take your cuts: no wound, but each cut tears color out of him. Parrying him and baiting him with a feint do the same. His cuts on you, his parries, and every second of the duel feed him, and the more he holds the quicker his blade; in full bloom he looses a petal storm, a quick cut in one line and another in the other. Once his color is spent, your cuts wound him like anyone. Beat him and the color floods back into the trees, and your hakama takes the petals' rose. Tuning: `BLOOM` in `src/spring/boss.js`.
 
 The arts:
 

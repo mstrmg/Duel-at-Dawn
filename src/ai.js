@@ -411,3 +411,29 @@ export class SpearmanAI extends EnemyAI {
     this.strafe(dt, 3.2);
   }
 }
+
+// The Petal Blade, keeper of the great shrine: the Ronin's way of fighting, quicker to read
+// you and quicker to answer. How much of the stolen color he still holds (f.bloom, set by
+// src/spring/boss.js) speeds his blade; in full bloom (f.storm) his next strike comes as a
+// petal storm: a quick cut and a second one in the other line straight after.
+export class PetalBladeAI extends RoninAI {
+  constructor(fighter, player, game) {
+    super(fighter, player, game);
+    Object.assign(this.P, {
+      reaction: [0.06, 0.12],
+      parry: 0.14,
+      riposte: 0.85,
+      readStance: 0.85,
+      drift: [0.2, 0.3],
+    });
+  }
+
+  strike(quick) {
+    const f = this.f, p = this.p;
+    if (!f.storm) return super.strike(quick);
+    f.storm = false;
+    const s = counterOf(p.displayStance);
+    this.commit({ stance: s, windup: 0.4, followUp: { stance: counterOf(s), windup: 0.34, lunge: 0.8 } });
+    this.game.events.emit('storm', f);
+  }
+}

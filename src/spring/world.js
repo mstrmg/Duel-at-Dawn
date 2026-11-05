@@ -15,6 +15,7 @@ import { tAtZ, beside, TORII_RUN, BAMBOO, BURNED_FARM } from './layout.js';
 import { PINK } from './palette.js';
 import { buildWater } from './water.js';
 import { roofGeometry, gableGeometry, roofHeight } from './roofs.js';
+import { bloomMaterial, setBloom } from '../models.js';
 
 export { PINK };
 
@@ -230,7 +231,7 @@ function cherryTree(B, x, z, size = 1) {
 }
 
 // weeping cherry: long hanging strands of blossom
-function weepingCherry(B, x, z, size = 1.6) {
+function weepingCherry(B, x, z, size = 1.6, mats = MAT) {
   const y0 = heightAt(x, z);
   const base = new THREE.Matrix4().compose(v1.set(x, y0, z), q.identity(), v2.set(size, size, size));
   const top = new THREE.Vector3(0.2, 3.4, 0);
@@ -241,14 +242,14 @@ function weepingCherry(B, x, z, size = 1.6) {
     const out = rr(1.6, 2.8);
     const tip = new THREE.Vector3(Math.cos(a) * out, rr(3.6, 4.6), Math.sin(a) * out);
     B.limb(GEO.limb, MAT.bark, top, tip, 0.07, base);
-    B.put(GEO.blob, MAT.blossomA, tip.x, tip.y + 0.1, tip.z, rand() * 3, rand() * 3, 0, 0.9, 0.5, 0.9, base);
+    B.put(GEO.blob, mats.blossomA, tip.x, tip.y + 0.1, tip.z, rand() * 3, rand() * 3, 0, 0.9, 0.5, 0.9, base);
     // strands fall from the branch tip in beads of blossom
     for (let s = 0; s < 3; s++) {
       const sx = tip.x * rr(1.0, 1.25), sz = tip.z * rr(1.0, 1.25);
       for (let k = 0; k < 6; k++) {
         const y = tip.y - 0.35 - k * 0.42;
         if (y < 0.6) break;
-        B.put(GEO.blobLo, k % 2 ? MAT.blossomC : MAT.blossomB, sx + rr(-0.05, 0.05), y, sz + rr(-0.05, 0.05), rand() * 3, rand() * 3, 0, 0.2, 0.3, 0.2, base);
+        B.put(GEO.blobLo, k % 2 ? mats.blossomC : mats.blossomB, sx + rr(-0.05, 0.05), y, sz + rr(-0.05, 0.05), rand() * 3, rand() * 3, 0, 0.2, 0.3, 0.2, base);
       }
     }
   }
@@ -873,8 +874,19 @@ function riverRock(B, x, z, s) {
   rippleRocks.push([x, z, s * 1.05, r.level]);
 }
 
+// The great shrine's old cherries have blossom of their own: during the duel with the
+// Petal Blade they show how much of Spring's color is still in the valley (see boss.js).
+const SHRINE_BLOSSOM = {
+  blossomA: bloomMaterial(0.92, PINK.blossom),
+  blossomB: bloomMaterial(0.84, PINK.blossom),
+  blossomC: bloomMaterial(1.0, PINK.petal),
+};
+export function setShrineBloom(k) {
+  for (const m of Object.values(SHRINE_BLOSSOM)) setBloom(m, k);
+}
+
 // the great shrine at the end of the road: the hall on its platform, a big torii at the
-// forecourt, lanterns round the open ground where the Petal Blade will wait, and old cherries
+// forecourt, lanterns round the open ground where the Petal Blade waits, and old cherries
 function greatShrine(scene, B) {
   const { x, z, r } = SHRINE;
   shrine(B, x, z - r - 5, 0);
@@ -885,9 +897,9 @@ function greatShrine(scene, B) {
     if (Math.abs(lx - x) < 3 && Math.abs(Math.cos(a)) > 0.9) continue; // leave the way in and the steps clear
     lantern(B, lx, lz, -a);
   }
-  weepingCherry(B, x - r - 6, z - r + 2, 2.0);
-  weepingCherry(B, x + r + 7, z - r + 4, 1.8);
-  weepingCherry(B, x - r - 3, z + r - 2, 1.3);
+  weepingCherry(B, x - r - 6, z - r + 2, 2.0, SHRINE_BLOSSOM);
+  weepingCherry(B, x + r + 7, z - r + 4, 1.8, SHRINE_BLOSSOM);
+  weepingCherry(B, x - r - 3, z + r - 2, 1.3, SHRINE_BLOSSOM);
   // a sacred cedar bound with a straw rope and paper streamers
   const [cx, cz] = [x + r + 3, z + 6];
   const y = heightAt(cx, cz);

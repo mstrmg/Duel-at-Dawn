@@ -1,5 +1,5 @@
 // A seal stamped on the screen whenever the wanderer gains or loses something that changes
-// how he fights: a technique, a blessing, a charm, a wound, or a wound mended. Each kind has
+// how he fights: a technique, a blessing, a charm, a wound, a wound mended, or a season's color won back. Each kind has
 // its own color, the same color its label carries on the HUD and the run panel.
 export const KINDS = {
   technique: { kanji: '技', label: 'technique learned', color: '#2f5596' },
@@ -7,6 +7,7 @@ export const KINDS = {
   charm: { kanji: '守', label: 'charm', color: '#b8801a' },
   wound: { kanji: '傷', label: 'wounded', color: '#b3171d' },
   mended: { kanji: '癒', label: 'wound mended', color: '#3f8a5a' },
+  color: { kanji: '色', label: 'color returns', color: '#c65d82' },
 };
 
 let box = null;

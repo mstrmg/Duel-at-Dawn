@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { hatch, flat, noEdges } from "./ink.js";
 import { COLORS } from './config.js';
+import { PINK } from './spring/palette.js';
 
 const D = THREE.MathUtils.degToRad;
 
@@ -116,8 +117,33 @@ export const ACCENTS = {
   sohei: 0xd4a52a, // a string of gold prayer beads
   deserter: 0x1f8f99, // the torn teal banner still on his back
   yamabushi: 0x4f9fd8, // the sky-blue pompoms of a mountain ascetic's sash
+  petal: PINK.deep, // the Petal Blade: all of his clothes, while he holds the color (bloomMaterial)
 };
 export const WOUND_RED = 0xb3171d;
+
+// ---------- color ----------
+// The wanderer wins color back season by season: a quarter of him for each region. He
+// leaves Winter with his coat in color and wins his hakama from the Petal Blade in Spring.
+export const HERO_COLORS = {
+  coat: 0x2b4a86, // winter: indigo, the color of a clear night over snow
+  hakama: 0xc65d82, // spring: the petals' rose, taken back from the Petal Blade
+};
+// A material that can be drained of its color: bloom 1 is full color, 0 is plain ink.
+// Used by the Petal Blade, whose clothes hold the color he took, and the shrine's cherries.
+export function bloomMaterial(tone, color = PINK.blossom, ink = PINK.ink) {
+  const m = hatch(tone, color, 1.1, { fill: 0.92, ink, unique: true });
+  m.userData.bloom = { tone, color: new THREE.Color(color), ink: new THREE.Color(ink) };
+  return m;
+}
+const INK = new THREE.Color(COLORS.ink), PAPER = new THREE.Color(COLORS.paper);
+export function setBloom(m, k) {
+  const b = m.userData.bloom, u = m.uniforms;
+  u.uTint.value.copy(PAPER).lerp(b.color, k);
+  u.uInk.value.copy(INK).lerp(b.ink, k);
+  u.uFill.value = 0.16 + (0.92 - 0.16) * k;
+  // drained, the cloth goes to an ordinary mid-grey ink tone
+  u.uTone.value = 0.55 + (b.tone - 0.55) * k;
+}
 const WOUND_DARK = 0x4a0609; // the open cut
 const BLOOD = 0x8e1418; // blood soaked into cloth
 
@@ -364,6 +390,8 @@ const LOOKS = {
   // the side paths' fighters
   deserter: { kimono: 0.5, hakama: 0.34, obi: 0.2, collar: 0.85, hair: 0.04, hat: 'hachigane', sleeve: 0.46, forearm: 0.3, armor: 0.2, long: 1.3 },
   yamabushi: { kimono: 0.94, hakama: 0.72, obi: 0.5, collar: 0.98, hair: 0.05, hat: 'tokin', sleeve: 0.9, forearm: 0.88 },
+  // the Spring boss: his clothes hold the color he took from the valley (see bloomMaterial)
+  petal: { kimono: 0.84, hakama: 0.7, obi: 0.18, collar: 0.98, hair: 0.04, hat: 'sprig', sleeve: 0.86, forearm: 0.92, mantle: 0.9, bloom: true },
   // ambushers: plain men off the road, no color of their own
   thug: { kimono: 0.58, hakama: 0.5, obi: 0.4, collar: 0.8, hair: 0.08, hat: 'band', sleeve: 0.55, forearm: 0.88 },
   hungry: { kimono: 0.7, hakama: 0.56, obi: 0.32, collar: 0.9, hair: 0.12, hat: 'kasa', sleeve: 0.66, forearm: 0.9, mantle: 0.55 },
@@ -372,7 +400,14 @@ const LOOKS = {
 
 export class FighterModel {
   constructor(look, weaponKind) {
-    const L = LOOKS[look];
+    let L = LOOKS[look];
+    this.look = look;
+    this.L = L;
+    if (L.bloom) {
+      // the cloth that holds his color: kimono and sleeves pink, the mantle and hakama paler
+      this.bloomMats = [bloomMaterial(L.kimono), bloomMaterial(L.mantle, PINK.petal), bloomMaterial(0.76, PINK.deep), bloomMaterial(L.hakama, PINK.petal)];
+      L = { ...L, kimono: this.bloomMats[0], sleeve: this.bloomMats[0], mantle: this.bloomMats[1], hakama: this.bloomMats[3] };
+    }
     this.root = new THREE.Group();
     this.root.rotation.order = 'YXZ';
     this.body = new THREE.Group(); // leans and crouches
@@ -402,8 +437,10 @@ export class FighterModel {
       this.root.add(pivot);
       const leg = mesh(legGeo, L.hakama, pivot);
       leg.scale.z = 0.9;
+      pivot.userData.leg = leg;
       return pivot;
     });
+    this.cloth = { coat: [], hakama: [this.hakama, ...this.legs.map((p) => p.userData.leg)] };
     this.hip = HIP;
 
     // kimono upper body
@@ -412,6 +449,7 @@ export class FighterModel {
       L.kimono, B
     );
     torso.scale.z = 0.74;
+    this.cloth.coat.push(torso);
     // crossed collar: two pale bands meeting at the chest
     const collarGeo = new THREE.BoxGeometry(0.045, 0.34, 0.02);
     mesh(collarGeo, L.collar, B, [0.055, 1.37, 0.185], [0.18, 0, -0.42]);
@@ -483,6 +521,16 @@ export class FighterModel {
     } else if (L.hat === 'jingasa') {
       mesh(facet(new THREE.ConeGeometry(0.4, 0.13, 16, 1)), 0.2, B, [0, 1.86, 0]);
       mesh(new THREE.SphereGeometry(0.03, 8, 6), 0.9, B, [0, 1.93, 0]);
+    } else if (L.hat === 'sprig') {
+      // long hair tied high and falling down his back, a sprig of cherry blossom through the tie
+      mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.08, 7), L.hair, B, [0, 1.83, -0.08], [0.5, 0, 0]);
+      const tail = mesh(new THREE.CylinderGeometry(0.045, 0.012, 0.62, 7), L.hair, B);
+      placeLimb(tail, new THREE.Vector3(0, 1.84, -0.1), new THREE.Vector3(0.02, 1.3, -0.24));
+      const sprig = this.bloomMats?.[2] ?? 0.9;
+      mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.3, 4), 0.2, B, [0.02, 1.86, -0.08], [0.2, 0, 1.2]);
+      for (const [x, y, z, r] of [[0.13, 1.9, -0.06, 0.04], [0.09, 1.93, -0.1, 0.032], [0.16, 1.86, -0.1, 0.03], [-0.1, 1.83, -0.07, 0.03]]) {
+        mesh(new THREE.SphereGeometry(r, 8, 6), sprig, B, [x, y, z]);
+      }
     }
 
     // scabbard at the left hip for sword users
@@ -545,6 +593,7 @@ export class FighterModel {
       pole: new THREE.Vector3(i === 0 ? 1 : -1, -0.7, -0.35).normalize(),
       elbow: new THREE.Vector3(),
     }));
+    for (const a of this.arms) this.cloth.coat.push(a.sleeve);
 
     // wounds: the cut itself where it landed, bleeding, shown by setWounds()
     this.woundMarks = this.buildWounds(L, look);
@@ -585,6 +634,26 @@ export class FighterModel {
 
     this.gait = 0;
     this.cur = lerpPose(POSES[weaponKind].guard[1], POSES[weaponKind].guard[1], 0);
+    // the wanderer comes out of Winter with his coat in color
+    if (look === 'player') this.setColors(['coat']);
+  }
+
+  // Which parts of the wanderer are in color: 'coat' (kimono and sleeves), 'hakama'.
+  setColors(parts = []) {
+    for (const [part, meshes] of Object.entries(this.cloth)) {
+      const on = parts.includes(part) && HERO_COLORS[part];
+      const tone = part === 'coat' ? this.L.kimono : this.L.hakama;
+      for (const m of meshes) {
+        // a sleeve has its own tone, a little lighter than the body of the coat
+        const t = part === 'coat' && this.arms?.some((a) => a.sleeve === m) ? this.L.sleeve : tone;
+        m.material = on ? accent(HERO_COLORS[part]) : (typeof t === 'number' ? hatch(t) : t);
+      }
+    }
+  }
+
+  // The Petal Blade: how much of the stolen color his clothes still hold (0..1).
+  setBloom(k) {
+    for (const m of this.bloomMats ?? []) setBloom(m, k);
   }
 
   buildArmor(L) {

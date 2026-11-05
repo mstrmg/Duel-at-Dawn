@@ -358,6 +358,15 @@ export class Fighter {
 
   // wound: where the blow landed (see wounds.js); each point of damage leaves a wound
   takeHit(dmg, from, knock = 4, wound = null) {
+    // a boss can turn a blow aside in its own way (the Petal Blade's veil of petals)
+    if (this.shield?.(dmg, from)) {
+      tmp.subVectors(this.pos, from.pos).setY(0).normalize();
+      this.vel.addScaledVector(tmp, knock);
+      this.attack = null;
+      this.blockHeld = false;
+      this.setState('hitstun', HITSTUN_TIME * 0.8);
+      return false;
+    }
     if (this.has('pine') && !this.grazed) {
       // the Blessing of the Pine: the first cut of the duel only grazes
       this.grazed = true;
