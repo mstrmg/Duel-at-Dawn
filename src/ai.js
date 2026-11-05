@@ -424,9 +424,9 @@ export class PetalBladeAI extends RoninAI {
   constructor(fighter, player, game) {
     super(fighter, player, game);
     Object.assign(this.P, {
-      reaction: [0.06, 0.12],
-      parry: 0.12, block: 0.48, none: 0.2,
-      riposte: 0.85, riposteWindup: 0.42,
+      reaction: [0.07, 0.13],
+      parry: 0.1, block: 0.45, none: 0.25,
+      riposte: 0.7, riposteWindup: 0.46,
       readStance: 0.85,
       drift: [0.2, 0.28],
     });
@@ -461,7 +461,7 @@ export class PetalBladeAI extends RoninAI {
     // out of the petals and straight into a cut at the line you left open
     this.later(0.14, () => {
       if (f.state !== 'idle') return;
-      this.commit({ stance: counterOf(p.displayStance), windup: 0.4, quick: true });
+      this.commit({ stance: counterOf(p.displayStance), windup: 0.5, quick: true });
     });
   }
 

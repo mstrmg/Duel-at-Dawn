@@ -13,18 +13,22 @@
 //   color out of the trees at once, his storm grows to three cuts, and some of his blades
 //   glint pink: those turn to the other line just before they land.
 // - Win, and the color he took comes back to the trees, and some of it to you.
+import * as THREE from 'three';
 import { PINK } from './palette.js';
+import { flat, noEdges } from '../ink.js';
 import { setShrineBloom } from './world.js';
 
 export const BLOOM = {
-  start: 0.5, // the trees begin bright: he has not taken it all yet
+  start: 0.4, // the trees begin bright: he has not taken it all yet
   veil: 0.3, // at or above this the petals turn your cuts aside
-  siphon: 0.03, // per second, while the duel goes on
+  siphon: 0.025, // per second, while the duel goes on
+  spentHold: 6, // once his color is spent, it stays spent this long before he can draw more
   hitHim: -0.3, // a cut turned aside by the petals tears this much out of him
   wound: -0.05, // a cut that wounds him
   parry: -0.25, // you parry him
   bait: -0.12, // he bites on your feint
-  hitYou: 0.35, // he cuts you
+  hitYou: 0.25, // he cuts you
+  block: -0.05, // you block him
   parried: 0.25, // he parries you
   step: -0.06, // a petal step spends a little of it
   secondAt: 2, // his vitality when the second bloom comes
@@ -32,7 +36,7 @@ export const BLOOM = {
   turnAt: 0.16, // a turning blade changes line this long before it lands
   bloomStagger: 0.55, // how long a parry staggers him while he is in bloom (normally 1.1 s)
   stormAfter: 0.8, // full bloom spends itself on the storm, down to this
-  speed: 0.3, // at full bloom his windups are this much shorter (0 bloom: a little slower)
+  speed: 0.2, // at full bloom his windups are this much shorter (0 bloom: a little slower)
 };
 
 export class BossFight {
@@ -65,6 +69,7 @@ export class BossFight {
     // the killing blow: everything he held floods back into the trees as he falls
     ev.on('hit', (def, att, info) => { if (this.active && def === this.f && info.killed) this.bloom = 0; });
     on('baited', (f) => { if (f === this.f) this.add(BLOOM.bait); });
+    on('block', (def, att) => { if (def === this.p && att === this.f) this.add(BLOOM.block); });
     // his second bloom: the first time your cuts bring him this low
     ev.on('hit', (def, att, info) => {
       if (!this.active || def !== this.f || info.killed || this.f.phase === 2 || this.f.vitality > BLOOM.secondAt) return;
@@ -108,6 +113,19 @@ export class BossFight {
       this.stormGust = 1.2;
     });
     this.apply(1 - this.bloom);
+    // the veil: petals circling him while they still turn your cuts aside
+    this.veil = new THREE.Group();
+    const mat = flat(PINK.blossom, { side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthWrite: false });
+    const geo = new THREE.PlaneGeometry(0.17, 0.11);
+    for (let i = 0; i < 48; i++) {
+      const m = new THREE.Mesh(geo, i % 3 ? mat : flat(PINK.deep, { side: THREE.DoubleSide }));
+      m.userData = { a: (i / 48) * Math.PI * 2, y: 0.5 + ((i * 7) % 11) / 10 * 1.3, r: 0.75 + ((i * 5) % 7) / 7 * 0.25, s: 0.8 + (i % 4) * 0.25 };
+      this.veil.add(m);
+    }
+    this.veil.visible = false;
+    this.veilK = 0;
+    noEdges.add(this.veil);
+    host.scene.add(this.veil);
   }
 
   // A duel with him is starting: f is the Petal Blade, p the wanderer.
@@ -118,6 +136,7 @@ export class BossFight {
     this.active = true;
     this.base ??= f.def.weapon;
     this.bloom = this.shown = BLOOM.start;
+    this.hold = 0;
     f.bloom = this.bloom;
     f.storm = false;
     f.phase = 1;
@@ -165,7 +184,8 @@ export class BossFight {
     this.bloom = Math.min(1, Math.max(0, this.bloom + d));
     if (say) this.host.hud.hint(say, 1.2);
     if (before >= BLOOM.veil && this.bloom < BLOOM.veil) {
-      this.host.hud.say('His color is spent', 'good', 1.2);
+      this.hold = BLOOM.spentHold; // a window to cut him: the petals do not come back at once
+      this.host.hud.say('His color is spent: cut him', 'good', 1.4);
       this.host.sound.ring(0.5, 2.2);
     } else if (before < BLOOM.veil && this.bloom >= BLOOM.veil) {
       this.host.hud.say('He blooms again', 'bad', 1.0);
@@ -187,7 +207,8 @@ export class BossFight {
 
   update(dt) {
     const host = this.host;
-    if (this.active && host.stage.mode === 'fight') this.add(BLOOM.siphon * dt);
+    if (this.hold > 0) this.hold -= dt;
+    else if (this.active && host.stage.mode === 'fight') this.add(BLOOM.siphon * dt);
     // his blade quickens with the color he holds
     if (this.active && this.f) {
       const k = 1 + BLOOM.speed * 0.3 - BLOOM.speed * this.bloom;
@@ -208,6 +229,21 @@ export class BossFight {
     if (this.stormGust > 0) {
       this.stormGust -= dt;
       if (this.stormGust <= 0) host.petals.gust = 0;
+    }
+    // the veil of petals circles him while it holds, and scatters when it breaks
+    const want = this.active && this.bloom >= BLOOM.veil && f?.alive ? 1 : 0;
+    this.veilK += (want - this.veilK) * (1 - Math.exp(-(want ? 3 : 6) * dt));
+    this.veil.visible = this.veilK > 0.02 && !!f;
+    if (this.veil.visible) {
+      this.veil.position.copy(f.pos);
+      const t = host.stage.time;
+      for (const m of this.veil.children) {
+        const u = m.userData, a = u.a + t * u.s;
+        const r = u.r * (1 + (1 - this.veilK) * 1.8);
+        m.position.set(Math.sin(a) * r, u.y + Math.sin(t * 2 + u.a * 3) * 0.08, Math.cos(a) * r);
+        m.rotation.set(t * u.s * 2 + u.a, a, u.a);
+        m.scale.setScalar(this.veilK);
+      }
     }
     // the bar: pink for the trees, his share in the deep rose of his clothes
     const t = (1 - this.shown) * 100;
