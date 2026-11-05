@@ -117,7 +117,8 @@ export function hatch(tone, tint = COLORS.paper, density = 1, opts = {}) {
   const fill = opts.fill ?? 0.16;
   const ink = opts.ink ?? COLORS.ink;
   const key = `${tone.toFixed(3)}|${tint}|${density}|${fill}|${ink}`;
-  if (hatchCache.has(key)) return hatchCache.get(key);
+  // unique: a material of its own, whose colors can be changed without touching the rest
+  if (!opts.unique && hatchCache.has(key)) return hatchCache.get(key);
   const m = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
@@ -138,7 +139,7 @@ export function hatch(tone, tint = COLORS.paper, density = 1, opts = {}) {
     side: THREE.DoubleSide,
   });
   Object.assign(m.uniforms, CUT); // shared, so one update moves every material's cutaway
-  hatchCache.set(key, m);
+  if (!opts.unique) hatchCache.set(key, m);
   return m;
 }
 

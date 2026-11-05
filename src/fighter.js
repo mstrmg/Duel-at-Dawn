@@ -358,6 +358,15 @@ export class Fighter {
 
   // wound: where the blow landed (see wounds.js); each point of damage leaves a wound
   takeHit(dmg, from, knock = 4, wound = null) {
+    // a boss can turn a blow aside in its own way (the Petal Blade's veil of petals)
+    if (this.shield?.(dmg, from)) {
+      tmp.subVectors(this.pos, from.pos).setY(0).normalize();
+      this.vel.addScaledVector(tmp, knock);
+      this.attack = null;
+      this.blockHeld = false;
+      this.setState('hitstun', HITSTUN_TIME * 0.8);
+      return false;
+    }
     if (this.has('pine') && !this.grazed) {
       // the Blessing of the Pine: the first cut of the duel only grazes
       this.grazed = true;
@@ -378,6 +387,8 @@ export class Fighter {
       this.game.events.emit('petal', this, from);
       return false;
     }
+    // a master takes no more than this from one blow, however open he was (the Petal Blade)
+    if (this.def.maxHit) dmg = Math.min(dmg, this.def.maxHit);
     if (wound) {
       for (let i = 0; i < dmg; i++) {
         if (this.wounds.length >= WOUND_ORDER.length) break;
@@ -769,7 +780,8 @@ export class Fighter {
     m.setWounds(this.wounds);
     // blood in his eye: the opponent cannot see the glint. Fox-fire shows a feint as pale.
     const foe = this.opponent;
-    m.setGlint(foe?.wounded('brow') && !foe.has('hachimaki') ? 0 : glint, !!(this.attack?.feint && foe?.has('fox')));
+    m.setGlint(foe?.wounded('brow') && !foe.has('hachimaki') ? 0 : glint,
+      this.attack?.turn && !this.attack.turned ? 'pink' : !!(this.attack?.feint && foe?.has('fox')));
     // feet follow how the body actually moved this frame: walking, circling, dodges, lunges
     if (!this.lastPos) this.lastPos = this.pos.clone();
     tmpVel.subVectors(this.pos, this.lastPos).divideScalar(Math.max(dt, 1e-4));

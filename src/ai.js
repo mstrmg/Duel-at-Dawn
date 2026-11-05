@@ -411,3 +411,70 @@ export class SpearmanAI extends EnemyAI {
     this.strafe(dt, 3.2);
   }
 }
+
+// The Petal Blade, keeper of the great shrine: the Ronin's way of fighting, quicker to read
+// you and quicker to answer, with the color he holds (f.bloom, set by src/spring/boss.js):
+// - the more he holds, the quicker his blade (boss.js scales his windups);
+// - in bloom he can melt into petals as you swing and step out at your side (petal step);
+// - in full bloom (f.storm) his next strike is a petal storm: quick cuts alternating lines,
+//   two of them, three once his second bloom has come;
+// - after his second bloom (f.phase 2) some strikes glint pink: that blade turns to the
+//   other line just before it lands (boss.js does the turn).
+export class PetalBladeAI extends RoninAI {
+  constructor(fighter, player, game) {
+    super(fighter, player, game);
+    Object.assign(this.P, {
+      reaction: [0.07, 0.13],
+      parry: 0.1, block: 0.45, none: 0.25,
+      riposte: 0.7, riposteWindup: 0.46,
+      readStance: 0.85,
+      drift: [0.2, 0.28],
+    });
+    this.lastStep = -9;
+  }
+
+  onPlayerWindup() {
+    const f = this.f, p = this.p;
+    // in bloom, he may melt away from your cut and come out of the petals at your side
+    if (p.attack && !f.busy && this.reacting <= 0 && this.baited <= 0 && f.bloom >= 0.3 &&
+        this.time - this.lastStep > 3 && Math.random() < (f.phase === 2 ? 0.3 : 0.2)) {
+      const impactIn = p.attack.windup - p.t;
+      this.handled = p.attack;
+      this.lastStep = this.time;
+      this.reacting = Math.max(0.05, impactIn - 0.1) + 0.3;
+      this.later(Math.max(0.05, impactIn - 0.1), () => this.petalStep());
+      return;
+    }
+    super.onPlayerWindup();
+  }
+
+  petalStep() {
+    const f = this.f, p = this.p;
+    if (f.busy || !f.alive || !p.alive) return;
+    const from = f.pos.clone();
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const a = Math.atan2(f.pos.x - p.pos.x, f.pos.z - p.pos.z) + side * 1.75;
+    f.pos.set(p.pos.x + Math.sin(a) * 2.0, f.pos.y, p.pos.z + Math.cos(a) * 2.0);
+    f.lastPos = f.pos.clone();
+    f.yaw = Math.atan2(p.pos.x - f.pos.x, p.pos.z - f.pos.z);
+    this.game.events.emit('petalstep', f, from);
+    // out of the petals and straight into a cut at the line you left open
+    this.later(0.14, () => {
+      if (f.state !== 'idle') return;
+      this.commit({ stance: counterOf(p.displayStance), windup: 0.5, quick: true });
+    });
+  }
+
+  strike(quick) {
+    const f = this.f, p = this.p;
+    if (f.storm) {
+      f.storm = false;
+      const s = counterOf(p.displayStance), o = counterOf(s);
+      const third = f.phase === 2 ? { stance: s, windup: 0.32, lunge: 0.8 } : null;
+      this.commit({ stance: s, windup: 0.4, followUp: { stance: o, windup: 0.34, lunge: 0.8, followUp: third } });
+      this.game.events.emit('storm', f);
+      return;
+    }
+    super.strike(quick);
+  }
+}

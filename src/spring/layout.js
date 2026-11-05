@@ -94,7 +94,7 @@ export const STOP_PLAN = [
 // the side paths' set pieces
 export const BURNED_FARM = { road: 3, t: 0.36, side: 1, off: 13 }; // a farm the war passed through
 export const FALLS = { x: -70, z: -270, pool: 7 }; // the pool under the falls, west of the path
-export const SHRINE = { x: 0, z: -444, r: 15 }; // the great shrine's forecourt, where the Petal Blade will wait
+export const SHRINE = { x: 0, z: -444, r: 15 }; // the great shrine's forecourt, where the Petal Blade waits
 export const GATE = { x: 4, z: 118 };
 export const TORII_RUN = [-364, -424]; // the tunnel of red torii on the last approach (z)
 export const BAMBOO = [-112, -200]; // the bamboo forest (z)

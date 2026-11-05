@@ -9,7 +9,7 @@ import { COLORS, PLAYER_DEF, RONIN_DEF, SPEARMAN_DEF } from '../config.js';
 import { POSES, lerpPose } from '../models.js';
 import { Sound } from '../audio.js';
 import { Fighter } from '../fighter.js';
-import { RoninAI, SpearmanAI } from '../ai.js';
+import { RoninAI, SpearmanAI, PetalBladeAI } from '../ai.js';
 import { DuelStage } from '../duel.js';
 import { Input } from '../input.js';
 import { Effects } from '../fx.js';
@@ -24,6 +24,7 @@ import { newRun, stopCard, take, COIN, START_COIN, rng, shuffle } from './stops.
 import { RoadMap } from './map.js';
 import { WOUNDS, ARTS } from '../wounds.js';
 import { showGain, KINDS } from '../gain.js';
+import { BossFight } from './boss.js';
 
 // who waits at each duel spot on the road. purse: coin he carries; elite: a harder duel
 const FOES = {
@@ -61,6 +62,13 @@ const FOES = {
       weapon: { ...SPEARMAN_DEF.weapon, reach: 3.3, windup: 0.7, counterWindup: 0.62, recover: 0.7 } },
     look: 'yamabushi', AI: SpearmanAI,
   },
+};
+// The Spring boss waits on the great shrine's forecourt. See boss.js for his fight.
+const PETAL_BLADE = {
+  def: { ...RONIN_DEF, id: 'petal', name: 'The Petal Blade', title: 'he took the color out of the spring, and keeps it in his sleeves',
+    elite: true, boss: true, purse: 60, vitality: 5, maxHit: 1, speed: 2.9, turnRate: 12,
+    weapon: { ...RONIN_DEF.weapon, reach: 2.3, windup: 0.62, counterWindup: 0.54, recover: 0.55 } },
+  look: 'petal', AI: PetalBladeAI,
 };
 // Ambushers: weaker men who lie in wait off the road and jump out at you. One cut kills
 // them, their blades are slow, and they carry little. No color of their own.
@@ -240,6 +248,7 @@ class SpringMap {
     // the run: coin, vitality between duels, and the wanderer's own copy of his stats,
     // which the inn, the dojo and the shrine change
     this.run = newRun(PLAYER_DEF);
+    this.run.colors = ['coat'];
     this.runEl = document.getElementById('run');
     this.promptEl = document.getElementById('prompt');
     this.stops = STOPS;
@@ -262,6 +271,17 @@ class SpringMap {
       this.scene.add(f.model.root);
       return { spot, f, AI: F.AI, beaten: false, restYaw: f.yaw };
     });
+    // the Petal Blade, in the middle of the forecourt, facing the torii you come through
+    {
+      const f = new Fighter({ ...PETAL_BLADE.def, weapon: { ...PETAL_BLADE.def.weapon } }, PETAL_BLADE.look, this.stage);
+      const spot = { id: 'petal', x: SHRINE.x, z: SHRINE.z + 1, y: heightAt(SHRINE.x, SHRINE.z + 1), boss: true };
+      f.pos.set(spot.x, spot.y, spot.z);
+      f.yaw = 0;
+      this.scene.add(f.model.root);
+      this.boss = { spot, f, AI: PETAL_BLADE.AI, beaten: false, restYaw: 0, boss: true };
+      this.foes.push(this.boss);
+    }
+    this.bossFight = new BossFight(this);
     this.ambushers = [];
     this.setupAmbushes();
     this.pos = new THREE.Vector3(START[0], 0, START[1]);
@@ -525,7 +545,8 @@ class SpringMap {
     // the stage always ticks: it keeps time for the waiting fighters and settles blood
     this.stage.step(dt);
     if (this.mode === 'explore') {
-      if (this.started && this.input.wasPressed('KeyM')) this.roadMap.toggle();
+      if (this.started && this.input.wasPressed('KeyF')) this.skipToBoss();
+      else if (this.started && this.input.wasPressed('KeyM')) this.roadMap.toggle();
       else if (this.roadMap.open && this.input.wasPressed('Escape')) this.roadMap.toggle(false);
       this.update(dt);
       this.updateFoes(dt);
@@ -555,6 +576,7 @@ class SpringMap {
       const w = this.mode === 'duel' ? this.fighter.pos : this.pos;
       cut = new THREE.Vector3(w.x, w.y + 1.1, w.z);
     }
+    this.bossFight.update(dt);
     this.petals.update(dt, this.time, this.camera.position);
     this.grass.mat.uniforms.uTime.value = this.time;
     this.grass.update(this.camera.position);
@@ -727,11 +749,16 @@ class SpringMap {
     // the duel is fought on the ground as it lies, round the trees and posts that stand there
     const arena = { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y, groundAt: heightAt, collide: pushOut };
     this.stage.start(p, f, foe.AI, { arena, intro: placed && !announce ? 0.6 : 1.6, announce });
+    if (foe.boss) this.bossFight.begin(f, p);
     this.stage.updateCamera(10); // cut straight to the shoulder shot
   }
 
   duelResult(won) {
     const name = this.foe.f.def.name;
+    if (this.foe.boss) {
+      this.bossFight.end(won);
+      if (won) return this.bossResult();
+    }
     // free the mouse so the buttons can be clicked
     if (document.pointerLockElement) document.exitPointerLock();
     const left = this.foes.filter((o) => !o.beaten && o !== this.foe).length;
@@ -773,6 +800,29 @@ class SpringMap {
     this.hud.screen.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => this.duelAction(b.dataset.act)));
   }
 
+  // The Petal Blade falls: the color he took goes back into the trees, and some into you.
+  bossResult() {
+    const first = !this.run.colors.includes('hakama');
+    if (first) {
+      this.run.colors.push('hakama');
+      this.model.setColors(this.run.colors);
+      showGain('color', 'The color of Spring', 'your hakama takes the petals\' rose');
+      this.sound.ring(0.4, 2.4);
+    }
+    if (!this.foe.paid) {
+      this.foe.paid = true;
+      this.run.coin += (this.foe.f.def.purse ?? 60) + this.run.purseBonus;
+      this.run.won++;
+    }
+    this.run.wounds = this.fighter.wounds.slice(0, this.run.def.vitality - 1);
+    this.hud.screenHtml(`<div class="card"><h2>The Petal Blade falls.</h2>
+      <p class="sub">the color he took runs back into the cherries</p>
+      <p class="say">${first ? 'Some of it stays with you. Your coat was the color of a winter night; now your hakama is the rose of the petals. Half of you is still ink.' : 'The trees are bright again.'}</p>
+      <p class="say">The road to Summer is not open yet. The great shrine is yours to rest at.</p>
+      <div class="choices row"><button data-act="walk"><b>Walk on</b><kbd>Enter</kbd></button></div></div>`);
+    this.hud.screen.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => this.duelAction(b.dataset.act)));
+  }
+
   duelAction(a) {
     if (a === 'walk') {
       this.foe.beaten = true;
@@ -789,6 +839,9 @@ class SpringMap {
   // Death ends the journey: a new wanderer, a new purse, and every fighter back on the road.
   newJourney() {
     this.run = newRun(PLAYER_DEF);
+    this.run.colors = ['coat'];
+    this.model.setColors(this.run.colors);
+    this.bossFight.reset();
     this.fighter.def = this.run.def;
     for (const o of this.foes) {
       o.beaten = false;
@@ -844,6 +897,29 @@ class SpringMap {
     // ease from the duel guard back to walking with the sword sheathed
     lerpPose(this.model.cur, this.model.cur, 0, this.pose);
     this.camNow = null;
+  }
+
+  // For testing: F jumps to the torii at the edge of the great shrine's forecourt, with the
+  // Petal Blade ahead. The rest of the journey is left as it was.
+  skipToBoss() {
+    this.roadMap.toggle(false);
+    if (this.boss.beaten) { this.boss.beaten = false; this.boss.paid = false; this.boss.f.reset(); }
+    const s = this.boss.spot;
+    this.boss.f.pos.set(s.x, s.y, s.z);
+    this.boss.f.lastPos = this.boss.f.pos.clone();
+    this.boss.f.yaw = 0;
+    this.pos.set(SHRINE.x, 0, SHRINE.z + SHRINE.r + 3);
+    this.pos.y = heightAt(this.pos.x, this.pos.z);
+    this.lastPos.copy(this.pos);
+    this.vel.set(0, 0, 0);
+    this.yaw = this.camYaw = Math.PI;
+    this.model.root.rotation.set(0, this.yaw, 0);
+    this.camNow = null;
+    this.snapCamera();
+    this.placeEl.innerHTML = '<b>The Petal Blade</b><span>skipped ahead to the great shrine (F). Walk up to him to duel.</span>';
+    this.placeEl.classList.add('show');
+    clearTimeout(this.placeTimer);
+    this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 3200);
   }
 
   // ---------- stops beside the road ----------

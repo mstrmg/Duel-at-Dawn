@@ -196,13 +196,15 @@ export function woundList(run) {
   return `<ul class="wounds">${run.wounds.map((w) => `<li><b>${WOUNDS[w].name}</b> ${WOUNDS[w].text}</li>`).join('')}</ul>`;
 }
 
-// the end of the road, for now: the forecourt where the Petal Blade will wait
+// the end of the road, for now: the forecourt where the Petal Blade waits
 function greatCard(stop, run) {
   const kept = [...run.techniques, ...run.blessings, ...run.charms];
   return `<div class="card stop">
     <h2>${stop.name}</h2>
     <p class="sub">the end of the spring road</p>
-    <p class="say">Petals settle on the empty forecourt. The Petal Blade is not here yet; when he comes, he will wait for you on this ground.</p>
+    <p class="say">${run.colors?.includes('hakama')
+      ? 'The cherries over the forecourt are in full color again. The Petal Blade lies where he fell. The road to Summer is not open yet.'
+      : 'Petals settle on the forecourt where the Petal Blade waits.'}</p>
     <p class="purse">${pips(run)}<span>${run.coin} ${COIN}</span><span>${run.won} duels won</span></p>
     ${kept.length ? `<p class="say">You carry ${kept.join(', ')}.</p>` : ''}
     <div class="choices row">
