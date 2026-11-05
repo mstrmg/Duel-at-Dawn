@@ -484,7 +484,7 @@ export class Fighter {
         const x = tmp.x * c + tmp.z * s, z = -tmp.x * s + tmp.z * c;
         tmp.set(x, 0, z);
         tmp.setLength(Math.max(0.1, dist - mv.y * speed * dt));
-        this.pos.set(opp.pos.x + tmp.x, 0, opp.pos.z + tmp.z);
+        this.pos.set(opp.pos.x + tmp.x, this.pos.y, opp.pos.z + tmp.z);
       } else {
         const f = this.forward(tmp);
         const r = tmp2.set(-f.z, 0, f.x);
@@ -505,9 +505,13 @@ export class Fighter {
         this.pos.add(tmp);
       }
     }
-    const r = Math.hypot(this.pos.x, this.pos.z);
-    if (r > ARENA_RADIUS) this.pos.multiplyScalar(ARENA_RADIUS / r);
-    this.pos.y = 0;
+    // the duel's ground: the clearing at the origin, or a spot the game sets (game.arena)
+    const A = this.game.arena;
+    const ax = A ? A.x : 0, az = A ? A.z : 0, ar = A ? A.r : ARENA_RADIUS;
+    const dx = this.pos.x - ax, dz = this.pos.z - az;
+    const r = Math.hypot(dx, dz);
+    if (r > ar) this.pos.set(ax + (dx * ar) / r, 0, az + (dz * ar) / r);
+    this.pos.y = A?.y ?? 0;
   }
 
   updateBreath(dt) {
@@ -639,7 +643,7 @@ export class Fighter {
       // topple
       const k = easeOut(this.deathT / 0.9);
       m.root.rotation.x = -k * 1.45 * this.fallDir;
-      m.root.position.y = 0.05 * k;
+      m.root.position.y = this.pos.y + 0.05 * k;
       m.body.rotation.z = k * 0.3;
     } else {
       // breathing bob, heavier when low on breath

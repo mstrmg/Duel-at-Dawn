@@ -6,6 +6,7 @@ import { flat } from './ink.js';
 export class Effects {
   constructor(scene) {
     this.scene = scene;
+    this.groundY = 0; // height of the duel ground (the Spring map duels on raised spots)
     this.drops = [];
     this.stains = [];
     const dropGeo = new THREE.SphereGeometry(0.035, 6, 4);
@@ -61,7 +62,7 @@ export class Effects {
   stain(x, z, size) {
     const m = new THREE.Mesh(this.stainGeo, flat(COLORS.red, { transparent: true, opacity: 0.85, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
-    m.position.set(x, 0.012 + Math.random() * 0.004, z);
+    m.position.set(x, this.groundY + 0.012 + Math.random() * 0.004, z);
     m.scale.set(size, size * (0.5 + Math.random() * 0.6), 1);
     m.rotation.z = Math.random() * 3;
     this.scene.add(m);
@@ -125,7 +126,7 @@ export class Effects {
       d.life -= dt;
       d.v.y -= 14 * dt;
       d.m.position.addScaledVector(d.v, dt);
-      if (d.m.position.y <= 0.02) {
+      if (d.m.position.y <= this.groundY + 0.02) {
         if (Math.random() < 0.35) this.stain(d.m.position.x, d.m.position.z, 0.06 + Math.random() * 0.12);
         d.life = 0;
       }

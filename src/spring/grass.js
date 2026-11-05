@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { COLORS } from '../config.js';
 import { noEdges, seeded } from '../ink.js';
-import { heightAt, roadAt, waterAt } from './terrain.js';
+import { heightAt, roadAt, waterAt, duelSpotNear } from './terrain.js';
 
 const grassVert = /* glsl */ `
   #include <common>
@@ -90,6 +90,8 @@ export function buildGrass(scene, count = 60000) {
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const road = roadAt(x, z), water = waterAt(x, z);
     if (water > 0.45) continue;
+    // duel ground is trodden short, so footwork stays readable
+    if (duelSpotNear(x, z) && rand() < 0.8) continue;
     // the verge: grass thins toward the worn dirt
     if (road > 0.5 || rand() < road * 2.2) continue;
     // meadow patches: some ground is lush, some sparse

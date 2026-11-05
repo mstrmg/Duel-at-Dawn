@@ -1,21 +1,15 @@
 // Duel at Dawn: combat prototype. Wires the scene, fighters, camera, effects and game flow.
 import * as THREE from 'three';
-import { PLAYER_DEF, RONIN_DEF, SPEARMAN_DEF, STANCE_NAMES } from './config.js';
-import { buildEnvironment, PenRenderer, noEdges } from './ink.js';
+import { PLAYER_DEF, RONIN_DEF, SPEARMAN_DEF } from './config.js';
+import { buildEnvironment, PenRenderer } from './ink.js';
 import { Fighter } from './fighter.js';
-import { Combat } from './combat.js';
 import { RoninAI, SpearmanAI } from './ai.js';
-import { PlayerController, CONTROLS } from './player.js';
+import { CONTROLS } from './player.js';
+import { DuelStage } from './duel.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { Effects } from './fx.js';
 import { Hud } from './hud.js';
-
-class Events {
-  constructor() { this.map = new Map(); }
-  on(name, fn) { (this.map.get(name) || this.map.set(name, []).get(name)).push(fn); }
-  emit(name, ...args) { for (const fn of this.map.get(name) || []) fn(...args); }
-}
 
 const DUELS = {
   ronin: { def: RONIN_DEF, look: 'ronin', AI: RoninAI, next: 'spearman' },
@@ -34,7 +28,6 @@ class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 400);
     this.camera.position.set(6, 3, 10);
-    this.camLook = new THREE.Vector3(0, 1.2, 0);
     addEventListener('resize', () => {
       this.renderer.setSize(innerWidth, innerHeight);
       this.camera.aspect = innerWidth / innerHeight;
@@ -44,35 +37,28 @@ class Game {
 
     buildEnvironment(this.scene);
     this.pen = new PenRenderer(this.renderer, this.scene, this.camera);
-    this.events = new Events();
-    this.combat = new Combat(this);
     this.fx = new Effects(this.scene);
     this.sound = new Sound();
     this.hud = new Hud();
     this.input = new Input(canvas);
+    this.stage = new DuelStage({
+      scene: this.scene, camera: this.camera, sound: this.sound, hud: this.hud, fx: this.fx, input: this.input,
+      host: { onResult: (won) => this.showResult(won) },
+    });
 
-    this.player = new Fighter(PLAYER_DEF, 'player', this);
+    this.player = new Fighter(PLAYER_DEF, 'player', this.stage);
     this.scene.add(this.player.model.root);
-    this.controller = new PlayerController(this.player, this.input);
 
     this.enemies = {};
     for (const [id, d] of Object.entries(DUELS)) {
-      const f = new Fighter(d.def, d.look, this);
+      const f = new Fighter(d.def, d.look, this.stage);
       f.model.root.visible = false;
       this.scene.add(f.model.root);
       this.enemies[id] = f;
     }
 
-    this.time = 0;
-    this.slow = { scale: 1, t: 0, dur: 0 };
-    this.stop = 0;
-    this.shake = 0;
-    this.mode = 'title';
-    this.modeT = 0;
+    this.mode = 'title'; // title | duel
     this.duelId = null;
-    this.hintsShown = new Set();
-
-    this.wireEvents();
     this.showTitle();
     this.clock = new THREE.Clock();
     this.loop = this.loop.bind(this);
@@ -83,7 +69,7 @@ class Game {
 
   showTitle() {
     this.mode = 'title';
-    this.hud.show(false);
+    this.stage.end();
     for (const e of Object.values(this.enemies)) e.model.root.visible = false;
     this.player.model.root.visible = true;
     this.player.reset();
@@ -129,111 +115,32 @@ class Game {
     const e = this.enemies[id];
     p.reset();
     e.reset();
-    p.opponent = e;
-    e.opponent = p;
     p.pos.set(0, 0, 4.5);
     e.pos.set(0, 0, -4.5);
     p.yaw = Math.PI;
     e.yaw = 0;
     e.model.root.visible = true;
     this.enemy = e;
-    this.ai = new d.AI(e, p, this);
-    this.controller.wanted = null;
-    this.setReachArcs(p, e);
-    this.hud.setFighters(p, e);
-    this.hud.screenHtml('');
-    this.hud.show(true);
-    this.mode = 'intro';
-    this.modeT = 0;
-    this.hud.say(d.def.name, 'intro', 2.0);
-    this.hud.hint(d.def.title, 2.0);
+    this.mode = 'duel';
+    this.stage.start(p, e, d.AI);
     // start the camera wide and to the side
     this.camera.position.set(9, 2.2, 1);
-    this.camLook.set(0, 1.2, 0);
-  }
-
-  // Dashed arcs on the ground at each weapon's reach: footwork is a fight over range.
-  makeArc(radius, width, opacity) {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color: 0x161514, transparent: true, opacity, depthWrite: false });
-    const n = 15;
-    for (let i = 0; i < n; i++) {
-      const a = -1.0 + (2.0 * i) / (n - 1);
-      const dash = new THREE.Mesh(new THREE.PlaneGeometry(radius * 0.085, width), mat);
-      dash.rotation.x = -Math.PI / 2;
-      dash.rotation.z = a;
-      dash.position.set(Math.sin(a) * radius, 0.02, Math.cos(a) * radius);
-      g.add(dash);
-    }
-    g.userData.mat = mat;
-    noEdges.add(g);
-    this.scene.add(g);
-    return g;
-  }
-
-  setReachArcs(p, e) {
-    for (const a of [this.playerArc, this.enemyArc]) if (a) { this.scene.remove(a); noEdges.delete(a); }
-    this.playerArc = this.makeArc(p.weapon.reach, 0.045, 0.5);
-    this.enemyArc = this.makeArc(e.weapon.reach, 0.03, 0.25);
-  }
-
-  updateArcs() {
-    const p = this.player, e = this.enemy;
-    if (!this.playerArc || !e) return;
-    const fighting = this.mode === 'fight';
-    for (const [arc, f, o] of [[this.playerArc, p, e], [this.enemyArc, e, p]]) {
-      arc.visible = fighting && f.alive;
-      arc.position.copy(f.pos);
-      arc.rotation.y = f.yaw;
-      const inReach = f.distTo(o) <= f.weapon.reach + o.def.radius * 0.5;
-      arc.userData.mat.opacity = f === p ? (inReach ? 0.85 : 0.35) : (inReach ? 0.55 : 0.18);
-    }
-    this.hud.setInReach(p.distTo(e) <= p.weapon.reach + e.def.radius * 0.5, e.distTo(p) <= e.weapon.reach + p.def.radius * 0.5);
-  }
-
-  beginFight() {
-    this.mode = 'fight';
-    this.modeT = 0;
-    this.hud.say('Draw', 'intro', 0.7);
-    if (!this.hintsShown.has('first')) {
-      this.hintsShown.add('first');
-      setTimeout(() => this.mode === 'fight' && this.hud.hint('Q raises your guard high, E drops it low. Match his line and hold guard to block; raise it as the glint flares to parry.', 4.5), 900);
-    } else if (!this.hintsShown.has('moves')) {
-      this.hintsShown.add('moves');
-      setTimeout(() => this.mode === 'fight' && this.hud.hint('Strike while moving: W lunges in with a thrust, S cuts as you back off, A or D sweeps wide and catches a sidestep.', 4.5), 900);
-    }
+    this.stage.camLook.set(0, 1.2, 0);
   }
 
   setPaused(on) {
-    if (on && this.mode === 'fight') {
-      this.mode = 'paused';
+    if (on && this.stage.mode === 'fight') {
       const controls = CONTROLS.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
-      this.hud.screenHtml(`<div class="card"><h2>Paused</h2><table class="controls">${controls}</table>
+      const html = `<div class="card"><h2>Paused</h2><table class="controls">${controls}</table>
         <div class="choices row"><button data-action="resume"><b>Resume</b><kbd>Esc</kbd></button>
         <button data-action="retry"><b>Restart duel</b><kbd>R</kbd></button>
-        <button data-action="title"><b>Choose opponent</b><kbd>T</kbd></button></div></div>`);
+        <button data-action="title"><b>Choose opponent</b><kbd>T</kbd></button></div></div>`;
+      this.stage.setPaused(true, html);
       this.bindScreenButtons();
-    } else if (!on && this.mode === 'paused') {
-      this.mode = 'fight';
-      this.hud.screenHtml('');
-    }
+    } else if (!on) this.stage.setPaused(false);
   }
 
-  onKill(victim, killer) {
-    this.mode = 'kill';
-    this.modeT = 0;
-    this.slowmo(0.12, 1.7);
-    this.fx.slash();
-    this.sound.drum();
-    this.shake = 0.35;
-    const won = victim !== this.player;
-    this.hud.say(won ? 'Victory' : 'Fallen', won ? 'kill' : 'kill bad', 2.5);
-    this.lastResult = won;
-  }
-
-  showResult() {
-    this.mode = 'result';
-    const won = this.lastResult;
+  showResult(won) {
     const d = DUELS[this.duelId];
     let html;
     if (won) {
@@ -257,139 +164,6 @@ class Game {
     this.bindScreenButtons();
   }
 
-  // ---------- feel ----------
-
-  slowmo(scale, dur) {
-    if (this.slow.t > 0 && this.slow.scale < scale) return;
-    this.slow = { scale, t: dur, dur };
-  }
-
-  hitstop(d) { this.stop = Math.max(this.stop, d); }
-
-  wireEvents() {
-    const ev = this.events, fx = this.fx, snd = this.sound, hud = this.hud;
-    const isP = (f) => f === this.player;
-    const contact = (a, b) => tmp.addVectors(a.pos, b.pos).multiplyScalar(0.5).setY(1.3).clone();
-
-    ev.on('windup', (f) => {
-      if (!isP(f) && f.attack.kind !== 'shove') snd.tell();
-    });
-    ev.on('parry', (def, att) => {
-      snd.ring(1.4, 1.3);
-      snd.parry();
-      const c = contact(def, att);
-      fx.spark(c, 18);
-      // a perfect parry freezes the moment, then lets it run on slowly
-      this.hitstop(isP(def) ? 0.18 : 0.12);
-      this.slowmo(0.25, 0.55);
-      this.shake = Math.max(this.shake, 0.16);
-      const sp = c.clone().project(this.camera);
-      fx.burst((sp.x + 1) / 2 * innerWidth, (1 - sp.y) / 2 * innerHeight);
-      if (isP(def)) hud.say('Parry', 'good');
-      else hud.say('Parried', 'bad');
-      if (isP(def) && !this.hintsShown.has('parry')) {
-        this.hintsShown.add('parry');
-        hud.hint('His guard is broken. Strike now for a killing counter.', 2.2);
-      }
-    });
-    ev.on('block', (def, att) => {
-      snd.ring(0.7, att.def.weapon.kind === 'yari' ? 0.8 : 1);
-      fx.spark(contact(def, att), 6);
-      this.hitstop(0.05);
-      this.shake = Math.max(this.shake, 0.06);
-      if (isP(def)) hud.say('Blocked', '', 0.5);
-    });
-    ev.on('guardbreak', (def, att) => {
-      snd.ring(1, 0.7);
-      snd.thud();
-      fx.spark(contact(def, att), 10);
-      this.hitstop(0.08);
-      hud.say('Guard broken', isP(def) ? 'bad' : 'good');
-    });
-    ev.on('clash', (a, b) => {
-      snd.ring(1.2, 0.9);
-      fx.spark(contact(a, b), 16);
-      this.hitstop(0.1);
-      this.slowmo(0.35, 0.3);
-      this.shake = Math.max(this.shake, 0.15);
-      hud.say('Clash');
-    });
-    ev.on('deflect', (def, att) => {
-      snd.ring(1, 1.1);
-      fx.spark(contact(def, att), 8);
-      this.hitstop(0.06);
-      hud.say(isP(def) ? 'Your line wins' : 'Out-lined', isP(def) ? 'good' : 'bad', 0.7);
-    });
-    ev.on('whiff', (att) => {
-      snd.whoosh();
-      if (isP(att) && att.attack?.iai) hud.hint('The draw-cut missed. You are open.', 1.2);
-    });
-    ev.on('evade', (def) => {
-      snd.whoosh();
-      if (isP(def)) hud.say('Evaded', '', 0.5);
-    });
-    ev.on('shoved', (def) => {
-      snd.thud();
-      this.shake = Math.max(this.shake, 0.1);
-      if (isP(def) && !this.hintsShown.has('shove')) {
-        this.hintsShown.add('shove');
-        hud.hint('He shoves you off with the shaft. Slip past the spearhead, then stay close.', 2.5);
-      }
-    });
-    ev.on('hit', (def, att, info) => {
-      snd.cut();
-      tmp2.subVectors(def.pos, att.pos).setY(0).normalize();
-      fx.blood(tmp.copy(def.pos).setY(1.25), tmp2, info.killed ? 70 : 24);
-      fx.stain(def.pos.x, def.pos.z, info.killed ? 0.9 : 0.35);
-      if (info.killed) {
-        this.onKill(def, att);
-        return;
-      }
-      this.hitstop(0.09);
-      this.slowmo(0.4, 0.3);
-      this.shake = Math.max(this.shake, 0.2);
-      if (isP(def)) {
-        hud.say('Wounded', 'bad');
-        if (info.wrongGuard) hud.hint(`Wrong guard: that was a ${STANCE_NAMES[att.attack?.stance ?? 0]} strike.`, 1.8);
-      } else {
-        hud.say(info.caught ? 'Caught' : info.exposed ? 'Counter' : info.move === 'lunge' ? 'Lunge' : 'Cut', 'good');
-      }
-    });
-    ev.on('winded', (f) => {
-      snd.thud();
-      if (isP(f)) {
-        hud.say('Winded', 'bad');
-        if (!this.hintsShown.has('winded')) {
-          this.hintsShown.add('winded');
-          hud.hint('Out of breath. Stand still to recover it.', 2);
-        }
-      } else hud.say('He is winded', 'good');
-    });
-    ev.on('dodge', () => snd.step());
-    ev.on('meet', () => {
-      if (!this.hintsShown.has('meet')) {
-        this.hintsShown.add('meet');
-        hud.hint('Lunging at a spear runs you onto it. Bait his thrust, slip it, then close.', 2.5);
-      }
-    });
-    ev.on('feint', (f) => {
-      snd.whoosh();
-      if (!isP(f)) hud.hint('A feint.', 0.8);
-    });
-    ev.on('baited', () => {
-      hud.say('He bit', 'good', 0.7);
-      if (!this.hintsShown.has('bait')) {
-        this.hintsShown.add('bait');
-        hud.hint('He guarded a strike that never came. Hit him now from another line.', 2.2);
-      }
-    });
-    ev.on('sheathe', (f) => isP(f) && snd.sheathe());
-    ev.on('iai', (f) => {
-      snd.whoosh();
-      if (f.attack?.full) snd.ring(0.5, 1.6);
-    });
-  }
-
   // ---------- loop ----------
 
   loop() {
@@ -402,44 +176,8 @@ class Game {
     const i = this.input;
     if (i.pressed.size) this.sound.start();
     this.handleMenuKeys();
-
-    let scale = 1;
-    if (this.stop > 0) {
-      this.stop -= realDt;
-      scale = 0.02;
-    } else if (this.slow.t > 0) {
-      this.slow.t -= realDt;
-      const k = Math.max(0, this.slow.t / this.slow.dur);
-      // ease back to full speed over the last part of the slowdown
-      scale = this.slow.scale + (1 - this.slow.scale) * (1 - Math.min(1, k * 1.6));
-    }
-    if (this.mode === 'paused' || this.mode === 'title' || this.mode === 'result') scale = this.mode === 'paused' ? 0 : 1;
-    const dt = realDt * scale;
-    this.time += dt;
-    this.modeT += realDt;
-
-    if (this.mode === 'intro' && this.modeT > 2.2) this.beginFight();
-    if (this.mode === 'kill' && this.modeT > 2.6) this.showResult();
-
-    if (this.mode === 'fight' || this.mode === 'kill' || this.mode === 'result' || this.mode === 'intro') {
-      if (this.mode === 'fight') {
-        this.controller.update(dt);
-        this.ai.update(dt);
-      } else {
-        this.player.moveInput.set(0, 0);
-        this.enemy.moveInput.set(0, 0);
-        if (this.mode !== 'intro') this.ai.update(dt);
-      }
-      if (dt > 0) {
-        this.player.update(dt);
-        this.enemy.update(dt);
-      }
-    } else if (this.mode === 'title') {
-      this.player.update(realDt);
-    }
-
-    this.updateArcs();
-    this.fx.update(dt, realDt);
+    this.stage.step(realDt);
+    if (this.mode === 'title') this.player.update(realDt);
     this.hud.update(realDt);
     this.updateCamera(realDt);
     this.pen.render(performance.now() / 1000);
@@ -451,48 +189,29 @@ class Game {
     if (this.mode === 'title') {
       if (i.wasPressed('Digit1')) this.startDuel('ronin');
       else if (i.wasPressed('Digit2')) this.startDuel('spearman');
-    } else if (this.mode === 'fight' || this.mode === 'paused') {
-      if (i.wasPressed('Escape')) this.setPaused(this.mode === 'fight');
-      else if (this.mode === 'paused' && i.wasPressed('KeyR')) this.startDuel(this.duelId);
-      else if (this.mode === 'paused' && i.wasPressed('KeyT')) this.showTitle();
-    } else if (this.mode === 'result') {
+      return;
+    }
+    const m = this.stage.mode;
+    if (m === 'fight' || m === 'paused') {
+      if (i.wasPressed('Escape')) this.setPaused(m === 'fight');
+      else if (m === 'paused' && i.wasPressed('KeyR')) this.startDuel(this.duelId);
+      else if (m === 'paused' && i.wasPressed('KeyT')) this.showTitle();
+    } else if (m === 'result') {
       if (i.wasPressed('KeyR')) this.startDuel(this.duelId);
       else if (i.wasPressed('KeyT', 'Escape')) this.showTitle();
-      else if (i.wasPressed('Enter') && this.lastResult && DUELS[this.duelId].next) this.startDuel(DUELS[this.duelId].next);
+      else if (i.wasPressed('Enter') && this.stage.lastResult && DUELS[this.duelId].next) this.startDuel(DUELS[this.duelId].next);
     }
   }
 
   updateCamera(dt) {
+    if (this.mode !== 'title') return this.stage.updateCamera(dt);
     const cam = this.camera;
-    const p = this.player;
-    let desired, look, rate = 6;
-    if (this.mode === 'title') {
-      const a = performance.now() * 0.00005;
-      desired = tmp.set(Math.sin(a) * 7, 2.4, 3 + Math.cos(a) * 7);
-      look = tmp2.set(0, 1.5, -6);
-      rate = 1.5;
-    } else {
-      const e = this.enemy;
-      const f = new THREE.Vector3().subVectors(e.pos, p.pos).setY(0);
-      const dist = f.length() || 1;
-      f.divideScalar(dist);
-      const right = new THREE.Vector3(-f.z, 0, f.x);
-      const back = 3.7 + Math.max(0, dist - 3) * 0.22;
-      const side = this.mode === 'kill' || this.mode === 'result' ? 2.2 : 1.25;
-      desired = tmp.copy(p.pos).addScaledVector(f, -back).addScaledVector(right, side).setY(2.05 + (this.mode === 'kill' ? 0.4 : 0));
-      look = tmp2.copy(p.pos).addScaledVector(f, Math.min(dist * 0.6, 4)).setY(1.2);
-      if (this.mode === 'intro') rate = 1.6;
-    }
-    const k = 1 - Math.exp(-rate * dt);
-    cam.position.lerp(desired, k);
-    this.camLook.lerp(look, k);
-    cam.lookAt(this.camLook);
-    if (this.shake > 0) {
-      this.shake = Math.max(0, this.shake - dt * 0.9);
-      const s = this.shake * 0.5;
-      cam.position.x += (Math.random() - 0.5) * s;
-      cam.position.y += (Math.random() - 0.5) * s;
-    }
+    const a = performance.now() * 0.00005;
+    const k = 1 - Math.exp(-1.5 * dt);
+    cam.position.lerp(tmp.set(Math.sin(a) * 7, 2.4, 3 + Math.cos(a) * 7), k);
+    this.stage.camLook.lerp(tmp2.set(0, 1.5, -6), k);
+    cam.lookAt(this.stage.camLook);
+    this.stage.applyShake(dt);
   }
 }
 
