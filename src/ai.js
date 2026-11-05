@@ -424,10 +424,9 @@ export class PetalBladeAI extends RoninAI {
   constructor(fighter, player, game) {
     super(fighter, player, game);
     Object.assign(this.P, {
-      reaction: [0.05, 0.1],
-      parry: 0.18, block: 0.5,
-      riposte: 0.9, riposteWindup: 0.4,
-      guardCancel: 0.85,
+      reaction: [0.06, 0.12],
+      parry: 0.12, block: 0.48, none: 0.2,
+      riposte: 0.85, riposteWindup: 0.42,
       readStance: 0.85,
       drift: [0.2, 0.28],
     });
@@ -438,7 +437,7 @@ export class PetalBladeAI extends RoninAI {
     const f = this.f, p = this.p;
     // in bloom, he may melt away from your cut and come out of the petals at your side
     if (p.attack && !f.busy && this.reacting <= 0 && this.baited <= 0 && f.bloom >= 0.3 &&
-        this.time - this.lastStep > 2.2 && Math.random() < (f.phase === 2 ? 0.45 : 0.3)) {
+        this.time - this.lastStep > 3 && Math.random() < (f.phase === 2 ? 0.3 : 0.2)) {
       const impactIn = p.attack.windup - p.t;
       this.handled = p.attack;
       this.lastStep = this.time;

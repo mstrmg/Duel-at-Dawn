@@ -5,6 +5,7 @@ import { COLORS } from './config.js';
 import { PINK } from './spring/palette.js';
 
 const D = THREE.MathUtils.degToRad;
+const HIP_Y = 0.95; // where the body leans from: the obi
 
 // A pose places the hands (fighter-local, +z faces the opponent, -x is the right side)
 // and points the weapon with yaw/pitch. lean tips the torso forward, crouch lowers it.
@@ -128,9 +129,6 @@ export const HERO_COLORS = {
   coat: 0x2b4a86, // winter: indigo, the color of a clear night over snow
   hakama: 0xc65d82, // spring: the petals' rose, taken back from the Petal Blade
 };
-// Before a part wins its color it is drawn as solid dark ink cloth, the same weight as the
-// colored parts, so the figure reads as one piece rather than a colored top over a sketch.
-const HERO_INK = 0x2e2c29;
 // A material that can be drained of its color: bloom 1 is full color, 0 is plain ink.
 // Used by the Petal Blade, whose clothes hold the color he took, and the shrine's cherries.
 export function bloomMaterial(tone, color = PINK.blossom, ink = PINK.ink) {
@@ -650,7 +648,7 @@ export class FighterModel {
       for (const m of meshes) {
         // a sleeve has its own tone, a little lighter than the body of the coat
         const t = part === 'coat' && this.arms?.some((a) => a.sleeve === m) ? this.L.sleeve : tone;
-        m.material = on ? accent(HERO_COLORS[part]) : this.look === 'player' ? accent(HERO_INK) : (typeof t === 'number' ? hatch(t) : t);
+        m.material = on ? accent(HERO_COLORS[part]) : (typeof t === 'number' ? hatch(t) : t);
       }
     }
   }
@@ -701,8 +699,11 @@ export class FighterModel {
     lerpPose(this.cur, target, k, this.cur);
     const p = this.cur;
 
-    this.body.position.y = -p.crouch;
-    this.body.rotation.x = p.lean * 0.6;
+    // lean pivots at the hips, where the kimono goes into the hakama, so the torso tips
+    // over the hakama instead of sliding off it (a run leans the whole body forward)
+    const th = p.lean * 0.6;
+    this.body.rotation.x = th;
+    this.body.position.set(0, -p.crouch + HIP_Y * (1 - Math.cos(th)), -HIP_Y * Math.sin(th));
     this.hakama.scale.y = 1 - p.crouch * 0.6;
     this.crouchNow = p.crouch;
 

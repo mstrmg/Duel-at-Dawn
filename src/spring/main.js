@@ -545,7 +545,8 @@ class SpringMap {
     // the stage always ticks: it keeps time for the waiting fighters and settles blood
     this.stage.step(dt);
     if (this.mode === 'explore') {
-      if (this.started && this.input.wasPressed('KeyM')) this.roadMap.toggle();
+      if (this.started && this.input.wasPressed('KeyF')) this.skipToBoss();
+      else if (this.started && this.input.wasPressed('KeyM')) this.roadMap.toggle();
       else if (this.roadMap.open && this.input.wasPressed('Escape')) this.roadMap.toggle(false);
       this.update(dt);
       this.updateFoes(dt);
@@ -896,6 +897,29 @@ class SpringMap {
     // ease from the duel guard back to walking with the sword sheathed
     lerpPose(this.model.cur, this.model.cur, 0, this.pose);
     this.camNow = null;
+  }
+
+  // For testing: F jumps to the torii at the edge of the great shrine's forecourt, with the
+  // Petal Blade ahead. The rest of the journey is left as it was.
+  skipToBoss() {
+    this.roadMap.toggle(false);
+    if (this.boss.beaten) { this.boss.beaten = false; this.boss.paid = false; this.boss.f.reset(); }
+    const s = this.boss.spot;
+    this.boss.f.pos.set(s.x, s.y, s.z);
+    this.boss.f.lastPos = this.boss.f.pos.clone();
+    this.boss.f.yaw = 0;
+    this.pos.set(SHRINE.x, 0, SHRINE.z + SHRINE.r + 3);
+    this.pos.y = heightAt(this.pos.x, this.pos.z);
+    this.lastPos.copy(this.pos);
+    this.vel.set(0, 0, 0);
+    this.yaw = this.camYaw = Math.PI;
+    this.model.root.rotation.set(0, this.yaw, 0);
+    this.camNow = null;
+    this.snapCamera();
+    this.placeEl.innerHTML = '<b>The Petal Blade</b><span>skipped ahead to the great shrine (F). Walk up to him to duel.</span>';
+    this.placeEl.classList.add('show');
+    clearTimeout(this.placeTimer);
+    this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 3200);
   }
 
   // ---------- stops beside the road ----------

@@ -17,12 +17,12 @@ import { PINK } from './palette.js';
 import { setShrineBloom } from './world.js';
 
 export const BLOOM = {
-  start: 0.6, // the trees begin bright: he has not taken it all yet
+  start: 0.5, // the trees begin bright: he has not taken it all yet
   veil: 0.3, // at or above this the petals turn your cuts aside
-  siphon: 0.045, // per second, while the duel goes on
-  hitHim: -0.25, // a cut turned aside by the petals tears this much out of him
+  siphon: 0.03, // per second, while the duel goes on
+  hitHim: -0.3, // a cut turned aside by the petals tears this much out of him
   wound: -0.05, // a cut that wounds him
-  parry: -0.22, // you parry him
+  parry: -0.25, // you parry him
   bait: -0.12, // he bites on your feint
   hitYou: 0.35, // he cuts you
   parried: 0.25, // he parries you
@@ -70,7 +70,7 @@ export class BossFight {
       if (!this.active || def !== this.f || info.killed || this.f.phase === 2 || this.f.vitality > BLOOM.secondAt) return;
       this.f.phase = 2;
       // and he fights closer: more parries, and his guard comes up out of every cut you land
-      if (host.stage.ai) Object.assign(host.stage.ai.P, { parry: 0.3, hitGuard: 1 });
+      if (host.stage.ai) Object.assign(host.stage.ai.P, { parry: 0.2, hitGuard: 0.9 });
       setTimeout(() => {
         if (!this.active) return;
         host.hud.say('Second bloom', 'bad', 1.4);
