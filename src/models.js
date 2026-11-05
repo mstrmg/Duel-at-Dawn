@@ -97,6 +97,26 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 // ---------- geometry helpers ----------
 
+// One pop of color on an ink figure: a solid fill of that color, inked darker in the shade.
+const accentCache = new Map();
+export function accent(color) {
+  if (!accentCache.has(color)) {
+    const c = new THREE.Color(color), dark = c.clone().multiplyScalar(0.25);
+    accentCache.set(color, hatch(0.72, color, 1, { fill: 0.95, ink: dark.getHex() }));
+  }
+  return accentCache.get(color);
+}
+// each fighter's own color: small, one part of him, so you know him at a glance
+export const ACCENTS = {
+  ronin: 0x2f5596, // an indigo cord binding his kasa
+  wanderer: 0xd89a2b, // a gourd of sake at his hip
+  spearman: 0x2f8a64, // a green tassel under the spearhead
+  bandit: 0xe0642a, // a persimmon headband
+  masked: 0x7444a8, // the violet bag of the flute in his sash
+  sohei: 0xd4a52a, // a string of gold prayer beads
+};
+export const WOUND_RED = 0xb3171d;
+
 function mesh(geo, tone, parent, pos, rot, scale) {
   const m = new THREE.Mesh(geo, typeof tone === 'number' ? hatch(tone) : tone);
   if (pos) m.position.set(...pos);
@@ -184,8 +204,14 @@ function buildKatana() {
   return { group: g, tip: new THREE.Vector3(0, 0.05, 1.1), length: 1.1 };
 }
 
-function buildYari() {
+function buildYari(tassel = null) {
   const g = new THREE.Group();
+  if (tassel) {
+    // a tassel of dyed horsehair under the spearhead
+    const t = accent(tassel);
+    mesh(new THREE.ConeGeometry(0.11, 0.34, 10, 1, true), t, g, [0, 0, 1.43], [-Math.PI / 2, 0, 0]);
+    mesh(new THREE.SphereGeometry(0.05, 8, 6), t, g, [0, 0, 1.59]);
+  }
   mesh(new THREE.CylinderGeometry(0.02, 0.024, 2.6, 7), 0.35, g, [0, 0, 0.35], [Math.PI / 2, 0, 0]);
   const head = mesh(facet(new THREE.OctahedronGeometry(0.05, 0)), 0.95, g, [0, 0, 1.86]);
   head.scale.set(0.5, 0.25, 4.2);
@@ -249,6 +275,7 @@ function bannerTexture() {
 const LOOKS = {
   player: { kimono: 0.3, hakama: 0.2, obi: 0.1, collar: 0.97, hair: 0.04, hat: null, sleeve: 0.28, forearm: 0.9 },
   ronin: { kimono: 0.66, hakama: 0.46, obi: 0.25, collar: 0.95, hair: 0.1, hat: 'kasa', sleeve: 0.6, forearm: 0.9, mantle: 0.42 },
+  wanderer: { kimono: 0.56, hakama: 0.38, obi: 0.2, collar: 0.95, hair: 0.1, hat: 'kasa', sleeve: 0.5, forearm: 0.9, mantle: 0.3 },
   spearman: { kimono: 0.74, hakama: 0.55, obi: 0.3, collar: 0.95, hair: 0.05, hat: 'jingasa', sleeve: 0.7, forearm: 0.22, armor: 0.26 },
   // the Spring road's other fighters
   bandit: { kimono: 0.44, hakama: 0.3, obi: 0.62, collar: 0.8, hair: 0.06, hat: 'band', sleeve: 0.42, forearm: 0.86, mantle: 0.24 },
@@ -336,11 +363,18 @@ export class FighterModel {
       // wide straw kasa that hides his eyes
       mesh(facet(new THREE.ConeGeometry(0.54, 0.22, 20, 1, true)), 0.86, B, [0, 1.86, 0.02], [0.06, 0, 0]);
       mesh(new THREE.TorusGeometry(0.535, 0.01, 4, 40), 0.3, B, [0, 1.75, 0.03], [Math.PI / 2 + 0.06, 0, 0]);
+      if (look === 'ronin') {
+        // a band of indigo cloth round the kasa, its ties hanging under the chin
+        const ind = accent(ACCENTS.ronin);
+        mesh(lathe([[0.42, 1.785], [0.37, 1.81], [0.3, 1.845]], 20), ind, B, [0, 0.012, 0.02], [0.06, 0, 0], [1.04, 1, 1.04]);
+        for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.035, 0.24, 0.01), ind, B, [sx * 0.08, 1.58, 0.1], [0.15, 0, sx * 0.3]);
+      }
     } else if (L.hat === 'band') {
       // a twisted headband knotted at the back, the tails loose
-      mesh(new THREE.TorusGeometry(0.128, 0.018, 6, 24), 0.94, B, [0, 1.74, 0.0], [Math.PI / 2 + 0.2, 0, 0], [0.96, 1.06, 1]);
-      mesh(new THREE.BoxGeometry(0.035, 0.2, 0.01), 0.94, B, [0.04, 1.64, -0.14], [0.6, 0, 0.3]);
-      mesh(new THREE.BoxGeometry(0.035, 0.16, 0.01), 0.94, B, [-0.03, 1.65, -0.14], [0.7, 0, -0.25]);
+      const band = accent(ACCENTS.bandit); // persimmon
+      mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.06, 18, 1, true), band, B, [0, 1.75, 0.0], [0.2, 0, 0], [0.96, 1, 1.06]);
+      mesh(new THREE.BoxGeometry(0.055, 0.32, 0.012), band, B, [0.05, 1.6, -0.16], [0.6, 0, 0.3]);
+      mesh(new THREE.BoxGeometry(0.055, 0.26, 0.012), band, B, [-0.04, 1.62, -0.16], [0.7, 0, -0.25]);
     } else if (L.hat === 'tengai') {
       // a deep woven basket hat that hides the whole head: a komuso's
       mesh(facet(new THREE.LatheGeometry([[0.0, 2.0], [0.13, 1.995], [0.185, 1.94], [0.2, 1.82], [0.195, 1.68], [0.18, 1.56]].map(([r, y]) => new THREE.Vector2(r, y)), 14)), 0.8, B, [0, -0.02, 0.01]);
@@ -362,6 +396,30 @@ export class FighterModel {
       mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 8), 0.8, B, [0.225, 0.975, 0.22], [Math.PI / 2 - 0.35, 0, 0]);
     }
 
+    if (look === 'wanderer') {
+      // a sake gourd hung from his sash
+      const gd = accent(ACCENTS.wanderer);
+      mesh(new THREE.SphereGeometry(0.1, 12, 9), gd, B, [-0.3, 0.7, 0.12]);
+      mesh(new THREE.SphereGeometry(0.072, 12, 9), gd, B, [-0.3, 0.85, 0.12]);
+      mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.1, 4), 0.2, B, [-0.29, 0.94, 0.11]);
+    } else if (look === 'masked') {
+      // a shakuhachi in a violet bag, thrust through his sash
+      const vb = accent(ACCENTS.masked);
+      const bag = mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 8), vb, B);
+      placeLimb(bag, new THREE.Vector3(-0.18, 1.22, 0.2), new THREE.Vector3(-0.32, 0.62, 0.1));
+      mesh(new THREE.SphereGeometry(0.055, 8, 6), vb, B, [-0.18, 1.23, 0.2]);
+    } else if (look === 'sohei') {
+      // a long string of gold prayer beads, slung from one shoulder across the chest
+      const gold = accent(ACCENTS.sohei);
+      const bead = new THREE.SphereGeometry(0.03, 8, 6);
+      for (let k = 0; k < 22; k++) {
+        const a = (k / 22) * Math.PI * 2;
+        const x = Math.cos(a) * 0.27, y = Math.sin(a) * 0.33;
+        // a tilted ring: over the left shoulder, under the right arm
+        mesh(bead, gold, B, [x * 0.8 + y * 0.35, 1.2 + y * 0.75 - x * 0.35, 0.21 + Math.max(0, Math.cos(a)) * 0.02 - Math.min(0, Math.sin(a)) * 0.02]);
+      }
+    }
+
     // arms: wide kimono sleeve to the elbow, bare forearm, hand
     this.shoulderL = new THREE.Vector3(0.22, 1.43, 0.0);
     this.shoulderR = new THREE.Vector3(-0.22, 1.43, 0.0);
@@ -373,15 +431,28 @@ export class FighterModel {
       sleeve: mesh(sleeveGeo, L.sleeve, B),
       fore: mesh(foreGeo, L.forearm, B),
       hand: mesh(handGeo, 0.92, B),
+      wrap: i === 1 ? mesh(new THREE.SphereGeometry(0.056, 8, 6), accent(WOUND_RED), B) : null, // a bound sword hand
       pole: new THREE.Vector3(i === 0 ? 1 : -1, -0.7, -0.35).normalize(),
       elbow: new THREE.Vector3(),
     }));
+
+    // wounds: a red-soaked binding where he was cut, shown by setWounds()
+    const red = accent(WOUND_RED);
+    this.woundMarks = {
+      brow: mesh(new THREE.TorusGeometry(0.128, 0.022, 6, 24), red, B, [0, 1.76, 0.01], [Math.PI / 2 - 0.15, 0, 0], [0.97, 1.07, 1]),
+      side: mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.11, 16, 1, true), red, B, [0, 1.13, 0], [0, 0, 0.12], [1, 1, 0.8]),
+      thigh: mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 12, 1, true), red, this.legs[1], [0, -0.3, 0], null, [1, 1, 0.92]),
+      arm: new THREE.Group(),
+    };
+    for (const m of Object.values(this.woundMarks)) m.visible = false;
+    this.arms[1].wrap.visible = false;
+    this.woundKey = '';
 
     // weapon
     this.weaponPivot = new THREE.Group();
     this.weaponPivot.rotation.order = 'YXZ';
     B.add(this.weaponPivot);
-    const w = weaponKind === 'yari' ? buildYari() : buildKatana();
+    const w = weaponKind === 'yari' ? buildYari(look === 'spearman' ? ACCENTS.spearman : null) : buildKatana();
     this.weapon = w;
     this.weaponPivot.add(w.group);
     this.gripOffset = weaponKind === 'yari' ? 0.45 : 0.0;
@@ -476,6 +547,7 @@ export class FighterModel {
     placeLimb(arm.sleeve, arm.sh, arm.elbow);
     placeLimb(arm.fore, arm.elbow, handPos);
     arm.hand.position.copy(handPos);
+    if (arm.wrap) arm.wrap.position.lerpVectors(handPos, arm.elbow, 0.22);
   }
 
   // Footwork: vx, vz is the body's ground speed in model space (+z toward the
@@ -517,6 +589,15 @@ export class FighterModel {
     this.body.position.y += -0.025 * a + bob * 0.25;
     this.hakama.rotation.z = -W.x * Math.sin(this.gait) * 0.03 * a;
     if (this.flag) this.flag.rotation.z = Math.sin(this.gait * 0.5) * 0.06;
+  }
+
+  // show a binding for each wound he carries (see wounds.js)
+  setWounds(list) {
+    const key = list.join();
+    if (key === this.woundKey) return;
+    this.woundKey = key;
+    for (const [id, m] of Object.entries(this.woundMarks)) m.visible = list.includes(id);
+    this.arms[1].wrap.visible = list.includes('arm');
   }
 
   // pale: fox-fire shows a feint in a cold blue instead of red

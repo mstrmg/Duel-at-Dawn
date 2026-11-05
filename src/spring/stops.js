@@ -7,6 +7,7 @@
 // each adds a rule to how you fight, kept as an id in the wanderer's def.arts. The inn's
 // sandals and whetstone are the only plain numbers left.
 import { ARTS, WOUNDS } from '../wounds.js';
+import { KINDS } from '../gain.js';
 
 export const COIN = '銭';
 export const START_COIN = 20;
@@ -133,7 +134,7 @@ export function stopCard(stop, run, note = null) {
   const say = note ?? done ?? line;
   const buttons = items.map((o, i) => `
     <button data-pick="${i}" ${o.why ? 'disabled' : ''}>
-      <b>${o.name}</b><span>${o.text}</span>
+      <b${ARTS[o.id] ? ` style="color:${KINDS[ARTS[o.id].kind].color}"` : ''}>${o.name}</b><span>${o.text}</span>
       <kbd>${i + 1}${o.cost ? ` · ${o.cost} ${COIN}` : ''}${o.why ? ` · ${o.why}` : ''}</kbd>
     </button>`).join('');
   return `<div class="card stop">

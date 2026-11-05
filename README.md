@@ -84,10 +84,13 @@ WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock 
   - **Cut thigh** (a Low cut or a sweep): no evade, only a limping step without i-frames, and slow footwork.
   - **Pierced side** (a thrust, a lunge or a draw-cut): the guard slips after a moment and has to be raised again.
   - **Cut forearm** (a side cut): you can't sheathe for a draw-cut; he can't strike twice in a row.
-  On the Spring road your wounds stay with you between duels until an inn, the teahouse or the hot spring mends them.
+  On the Spring road your wounds stay with you between duels until an inn, the teahouse or the hot spring mends them. A wounded fighter wears it: a red binding on the brow, the thigh, the side or the forearm.
+- **Seals.** Whenever you gain or lose something, a colored seal stamps in at the top right with its name and what it does: blue 技 for a technique, pink 祝 for a blessing, gold 守 for a charm, red 傷 for a wound, green 癒 for a wound mended. The same colors mark them in the corner panel and on the stop cards.
 - **Tells.** Before he strikes from a new line, his blade visibly drifts there. Then comes the windup and a red glint on the blade, and his stance glyph at the top turns red.
 
 ### The opponents
+
+Each fighter carries one small thing in color, so you know him at a glance: the Ronin's indigo kasa band, the Wandering Ronin's ochre gourd, the Spearman's green tassel, the Bamboo Bandit's persimmon headband, the Masked Duelist's violet flute bag, the Temple Guard's gold prayer beads.
 
 - **The Ronin** circles close, mirrors your line to guard it, strikes into your open line, sometimes strikes twice in a row, sometimes feints, and sometimes steps in from range. He answers every strike, drops his own windup into guard if you beat him to the punch, strikes back right after he blocks or evades you (a blocked lunge always gets punished), and parries more the more you press. He won't swing at you while you back away.
 - **The Spearman** keeps you at the end of his spear and gives ground when you get inside it. Walk straight in and he meets you with a quick stop-thrust. Circle him and he answers with a wide low sweep. Lunge at him and he puts the spearhead in the way (in your line the blades clash, in the other line his reach lands first). Get too close and he shoves you off with the shaft. His thrusts are narrow and his recovery is long, so the way in is to bait a thrust, slip it, then close. He shares the Ronin's answers to mashing.
@@ -102,4 +105,5 @@ WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock 
 - `src/models.js`: the fighters (kimono, hakama, hats, armor, two-bone arms) and stance poses
 - `src/ink.js`: pen-and-ink rendering (hatched shading with optional colored fills, edge-detected ink lines that wobble like hand-drawn frames, the camera cutaway) and the dawn clearing
 - `src/wounds.js`: the wounds (where a cut lands and what it takes away) and the arts (techniques, blessings, charms); the rules themselves live in `fighter.js`, `combat.js`, `ai.js` and `duel.js`
+- `src/gain.js`: the colored seals for a technique, blessing, charm, wound or mending, and their colors
 - `src/fx.js`, `src/audio.js`, `src/hud.js`: blood and brush strokes, synthesized sound, the HUD

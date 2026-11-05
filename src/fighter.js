@@ -713,6 +713,7 @@ export class Fighter {
     if (a?.kind === 'iai' && this.state === 'strike') target = P.iaiEnd;
 
     m.apply(target, rate, dt);
+    m.setWounds(this.wounds);
     // blood in his eye: the opponent cannot see the glint. Fox-fire shows a feint as pale.
     const foe = this.opponent;
     m.setGlint(foe?.wounded('brow') ? 0 : glint, !!(this.attack?.feint && foe?.has('fox')));

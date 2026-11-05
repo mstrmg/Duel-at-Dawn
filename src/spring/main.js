@@ -21,14 +21,15 @@ import { buildGrass } from './grass.js';
 import { DuelCutscene, squareUp } from './cutscene.js';
 import { newRun, stopCard, take, COIN, START_COIN } from './stops.js';
 import { RoadMap } from './map.js';
-import { WOUNDS } from '../wounds.js';
+import { WOUNDS, ARTS } from '../wounds.js';
+import { showGain, KINDS } from '../gain.js';
 
 // who waits at each duel spot on the road. purse: coin he carries; elite: a harder duel
 const FOES = {
   ronin: { def: { ...RONIN_DEF, purse: 25 }, look: 'ronin', AI: RoninAI },
   wanderer: {
     def: { ...RONIN_DEF, id: 'wanderer', name: 'The Wandering Ronin', title: 'he wants the lookout to himself', purse: 25 },
-    look: 'ronin', AI: RoninAI,
+    look: 'wanderer', AI: RoninAI,
   },
   spearman: { def: { ...SPEARMAN_DEF, purse: 30 }, look: 'spearman', AI: SpearmanAI },
   bandit: {
@@ -320,6 +321,7 @@ class SpringMap {
     lerpPose(this.pose, target, 1 - Math.exp(-8 * dt), this.pose);
     const m = this.model;
     m.apply(this.pose, Infinity, dt);
+    m.setWounds(this.run.wounds); // your wounds show on you as you walk
     const v = new THREE.Vector3().subVectors(this.pos, this.lastPos).divideScalar(Math.max(dt, 1e-4));
     v.y = 0;
     this.lastPos.copy(this.pos);
@@ -722,8 +724,12 @@ class SpringMap {
   }
 
   pick(i) {
+    const arts = this.run.def.arts.slice(), wounds = this.run.wounds.slice();
     const note = take(this.stop, this.run, i);
     if (!note) return;
+    // stamp a seal for whatever was gained or mended
+    for (const id of this.run.def.arts) if (!arts.includes(id)) showGain(ARTS[id].kind, ARTS[id].name, ARTS[id].text);
+    for (const w of wounds) if (!this.run.wounds.includes(w)) showGain('mended', WOUNDS[w].name);
     this.sound.ring(0.35, this.stop.kind === 'shrine' ? 1.6 : 1.2);
     this.showStop(note);
   }
@@ -749,12 +755,12 @@ class SpringMap {
     const r = this.run;
     const spent = r.def.petalSpent ? 'Blessing of the Petal' : null;
     const marks = [...r.techniques, ...r.blessings, ...r.charms];
-    const key = `${r.coin}|${r.wounds.join()}|${r.def.vitality}|${marks.join()}|${spent}`;
+    const key = `${r.coin}|${r.wounds.join()}|${r.def.vitality}|${r.def.arts.join()}|${spent}`;
     if (key === this.runKey) return;
     this.runKey = key;
     const pips = Array.from({ length: r.def.vitality }, (_, i) => `<i class="${i < r.vit ? '' : 'lost'}"></i>`).join('');
     const wounds = r.wounds.map((w) => `<em class="wound" title="${WOUNDS[w].text}">${WOUNDS[w].name}</em>`);
-    const arts = marks.map((m) => `<em class="${m === spent ? 'spent' : ''}">${m}</em>`);
+    const arts = r.def.arts.map((id) => `<em class="${ARTS[id].name === spent ? 'spent' : ''}" style="--c:${KINDS[ARTS[id].kind].color}" title="${ARTS[id].text}">${ARTS[id].name}</em>`);
     this.runEl.innerHTML = `<span class="pips">${pips}</span><b>${r.coin} ${COIN}</b>${wounds.join('')}${arts.join('')}`;
   }
 

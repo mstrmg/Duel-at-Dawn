@@ -53,19 +53,19 @@ export function nextWound(have, want) {
 // Every art, by id: its name and what it does, for the stops and the HUD.
 export const ARTS = {
   // the Willow Dojo
-  kiriotoshi: { name: 'Cutting Down', text: 'when your blade meets his in the same line, yours cuts his aside and lands' },
-  kaeshi: { name: 'Answering Blade', text: 'strike just after you block a blow and your cut comes at once' },
-  ryusui: { name: 'Flowing Guard', text: 'while you hold guard, it follows the line of his windup on its own' },
+  kiriotoshi: { kind: 'technique', name: 'Cutting Down', text: 'when your blade meets his in the same line, yours cuts his aside and lands' },
+  kaeshi: { kind: 'technique', name: 'Answering Blade', text: 'strike just after you block a blow and your cut comes at once' },
+  ryusui: { kind: 'technique', name: 'Flowing Guard', text: 'while you hold guard, it follows the line of his windup on its own' },
   // the Cliffside Dojo
-  nidan: { name: 'Second Draw', text: 'after a draw-cut, strike again at once: a miss no longer leaves you open' },
-  irimi: { name: 'Slip Inside', text: 'evade a blow as it lands and your next strike cannot be guarded' },
-  teppeki: { name: 'Iron Gate', text: 'strike out of your guard and the guard stays up in that line through your windup' },
+  nidan: { kind: 'technique', name: 'Second Draw', text: 'after a draw-cut, strike again at once: a miss no longer leaves you open' },
+  irimi: { kind: 'technique', name: 'Slip Inside', text: 'evade a blow as it lands and your next strike cannot be guarded' },
+  teppeki: { kind: 'technique', name: 'Iron Gate', text: 'strike out of your guard and the guard stays up in that line through your windup' },
   // the shrines
-  petal: { name: 'Blessing of the Petal', text: 'once a journey, the petals take a killing blow for you' },
-  wind: { name: 'Blessing of the Wind', text: 'the first time you would be winded in a duel, your breath comes back full' },
-  fox: { name: 'Blessing of the Fox', text: 'fox-fire: you see through his feints, his glint burns pale when he means to pull it' },
-  rice: { name: 'Blessing of the Rice', text: '+15 銭 from every duel you win' },
+  petal: { kind: 'blessing', name: 'Blessing of the Petal', text: 'once a journey, the petals take a killing blow for you' },
+  wind: { kind: 'blessing', name: 'Blessing of the Wind', text: 'the first time you would be winded in a duel, your breath comes back full' },
+  fox: { kind: 'blessing', name: 'Blessing of the Fox', text: 'fox-fire: you see through his feints, his glint burns pale when he means to pull it' },
+  rice: { kind: 'blessing', name: 'Blessing of the Rice', text: '+15 銭 from every duel you win' },
   // the teahouse's charms
-  bell: { name: 'Bell charm', text: 'a little bell rings at the moment to raise your parry' },
-  sageo: { name: 'Red sageo cord', text: 'Q or E during your own windup turns the cut into the other line' },
+  bell: { kind: 'charm', name: 'Bell charm', text: 'a little bell rings at the moment to raise your parry' },
+  sageo: { kind: 'charm', name: 'Red sageo cord', text: 'Q or E during your own windup turns the cut into the other line' },
 };

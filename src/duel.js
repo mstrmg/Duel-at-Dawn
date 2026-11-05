@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { STANCE_NAMES, PARRY_WINDOW } from './config.js';
 import { WOUNDS, ARTS } from './wounds.js';
+import { showGain } from './gain.js';
 import { noEdges } from './ink.js';
 import { Combat } from './combat.js';
 import { PlayerController } from './player.js';
@@ -263,6 +264,7 @@ export class DuelStage {
         hud.say(w ? w.name : 'Wounded', 'bad');
         if (info.wrongGuard) hud.hint(`Wrong guard: that was a ${STANCE_NAMES[att.attack?.stance ?? 0]} strike.`, 1.8);
         else if (w) hud.hint(w.text[0].toUpperCase() + w.text.slice(1) + '.', 3.2);
+        for (const id of info.wounds ?? []) showGain('wound', WOUNDS[id].name, WOUNDS[id].text);
       } else {
         hud.say(info.caught ? 'Caught' : info.exposed ? 'Counter' : info.move === 'lunge' ? 'Lunge' : 'Cut', 'good');
         if (w) hud.hint(`${w.name}: ${w.foe}.`, 2.6);
