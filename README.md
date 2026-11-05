@@ -19,10 +19,14 @@ npm run dev      # then open the URL it prints (http://localhost:5173)
 
 WASD walks (relative to the camera), Shift runs, the mouse looks (click to lock it, or drag), the arrow keys turn the camera, and the wheel sets its distance. Trees and buildings between the camera and the wanderer are cut away around him.
 
+Three fighters wait on the road: the Ronin on the main road before the crossroads, the Wandering Ronin on the lookout road, and the Spearman past the bridge. Each turns to watch you come. Walk within 10 m and a short cutscene plays (letterbox, a wide standoff, his face and title, you drawing, a gust of petals; Space, Enter or a click skips it), then the duel starts on a level patch of road 13 m across in radius, with the two of you 9 m apart as in the combat clearing. Win and you walk on (for now you walk on whole; wounds come later). Lose and you can rise again or go back to the gate.
+
 - `src/spring/terrain.js`: the height field, roads and stream (baked into one mask texture) and the ground shader
 - `src/spring/world.js`: trees, azaleas, wildflowers, rocks, fences, lanterns, bridge, inn, shrine and torii, merged per material; colliders
 - `src/spring/grass.js`: instanced ink grass that sways and thins with distance
-- `src/spring/main.js`: walking, collisions, the shoulder camera and place names
+- `src/spring/main.js`: walking, collisions, the shoulder camera, place names, and starting and ending duels on the road
+- `src/spring/cutscene.js`: the shots before a duel on the road
+- `src/duel.js`: one duel wherever it happens (event wiring, AI, hit-stop and slow-mo, reach arcs, the duel camera). Both pages use it
 
 ## Controls
 

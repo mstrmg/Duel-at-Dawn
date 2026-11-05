@@ -102,11 +102,32 @@ function baseHeight(x, z) {
     smooth(70, 130, r) * 9 + smooth(120, 200, r) * 14
   );
 }
+// Where duels happen: level ground on the road, kept clear of props.
+// road: index into ROADS, t: how far along it. The arena radius is how far fighters may roam.
+export const ARENA_R = 13; // the combat prototype's clearing is 12
+export const DUEL_SPOTS = [
+  { id: 'ronin', road: 0, t: 0.24 },
+  { id: 'wanderer', road: 2, t: 0.5 },
+  { id: 'spearman', road: 0, t: 0.78 },
+].map((s) => {
+  const p = roadCurves[s.road].curve.getPointAt(s.t);
+  return { ...s, x: p.x, z: p.z, y: baseHeight(p.x, p.z) - 0.12 };
+});
+const FLAT_IN = ARENA_R + 2, FLAT_OUT = ARENA_R + 8;
+
 export function heightAt(x, z) {
   let h = baseHeight(x, z);
   h -= roadAt(x, z) * 0.12; // a road is worn a little below the grass
+  // duel spots are level, so the fight plays out on flat ground
+  for (const s of DUEL_SPOTS) {
+    const d = Math.hypot(x - s.x, z - s.z);
+    if (d < FLAT_OUT) h += (s.y - h) * (1 - smooth(FLAT_IN, FLAT_OUT, d));
+  }
   h -= smooth(0.15, 0.8, waterAt(x, z)) * 1.1; // the stream cuts a channel
   return h;
+}
+export function duelSpotNear(x, z, pad = 0) {
+  return DUEL_SPOTS.find((s) => Math.hypot(x - s.x, z - s.z) < ARENA_R + pad);
 }
 
 // ---------- ground mesh and shader ----------

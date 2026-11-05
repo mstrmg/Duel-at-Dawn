@@ -12,7 +12,16 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+    <canvas id="ink"></canvas>
     <div id="paper"></div>
+    <div id="hud" class="hidden">
+      <div id="enemy-panel" class="panel"></div>
+      <div id="player-panel" class="panel"></div>
+      <div id="callout"></div>
+      <div id="subcallout"></div>
+    </div>
+    <div id="bars"><i></i><i></i></div>
+    <div id="cut-title"></div>
     <div id="place"></div>
     <div id="hint" class="hidden">WASD walk · Shift run · mouse to look · wheel to zoom</div>
     <div id="screen">
@@ -26,8 +35,10 @@
           <tr><th>Mouse</th><td>Look around (click to lock the mouse, Esc to free it; or drag)</td></tr>
           <tr><th>Arrow keys</th><td>Turn the camera</td></tr>
           <tr><th>Wheel</th><td>Camera distance</td></tr>
+          <tr><th>In a duel</th><td>Q / E stance, click or J strike, hold right click or K to guard, Space evade, Shift draw-cut, Esc pause</td></tr>
         </table>
-        <p class="rules">Follow the dirt road north from the south gate: the crossroads, the inn to the west, the lookout to the east, the bridge, and the shrine where the <em>Petal Blade</em> waits. No duels yet, just the map.</p>
+        <p class="rules">Follow the dirt road north from the south gate: the crossroads, the inn to the west, the lookout to the east, the bridge, and the shrine where the <em>Petal Blade</em> waits.
+        Fighters wait on the road. Walk up to one and the duel begins where you stand; win and you walk on.</p>
       </div>
     </div>
     <script type="module" src="./src/spring/main.js"></script>

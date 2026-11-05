@@ -29,3 +29,33 @@
   animation: hint-fade 1s 9s forwards;
 }
 @keyframes hint-fade { to { opacity: 0; } }
+
+/* duel cutscene: letterbox bars and a title in the lower third */
+#bars { position: fixed; inset: 0; pointer-events: none; }
+#bars i {
+  position: absolute; left: 0; right: 0; height: 12vh;
+  background: var(--ink);
+  transition: transform 0.6s cubic-bezier(0.6, 0, 0.3, 1);
+}
+#bars i:first-child { top: 0; transform: translateY(-100%); border-radius: 0 0 40% 30% / 0 0 6px 10px; }
+#bars i:last-child { bottom: 0; transform: translateY(100%); border-radius: 30% 40% 0 0 / 10px 6px 0 0; }
+#bars.show i { transform: none; }
+#cut-title {
+  position: fixed; left: 0; right: 0; bottom: 16vh;
+  text-align: center; pointer-events: none;
+  opacity: 0; transform: translateY(6px);
+  transition: opacity 0.35s, transform 0.5s;
+}
+#cut-title.show { opacity: 1; transform: none; }
+#cut-title b {
+  font-size: clamp(40px, 7vw, 84px); font-weight: 800; letter-spacing: 0.1em;
+  color: var(--ink); text-shadow: 0 0 18px var(--paper), 0 0 6px var(--paper);
+}
+#cut-title b::after {
+  content: ''; display: block; height: 5px; width: 40%; margin: 4px auto 0;
+  background: var(--red); border-radius: 2px 8px 1px 6px;
+}
+#cut-title span {
+  font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.18em; color: var(--ink);
+  text-shadow: 0 0 14px var(--paper), 0 0 5px var(--paper);
+}

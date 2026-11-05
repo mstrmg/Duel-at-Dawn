@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { COLORS } from '../config.js';
 import { hatch, flat, noEdges, seeded } from '../ink.js';
-import { heightAt, roadAt, waterAt, roadCurves, streamCurve, CLEARINGS, WORLD } from './terrain.js';
+import { heightAt, roadAt, waterAt, roadCurves, streamCurve, CLEARINGS, WORLD, DUEL_SPOTS, ARENA_R } from './terrain.js';
 
 // Spring's accent: pink, alongside the red that marks danger, the sun and the shrine
 export const PINK = { petal: 0xf5bcd0, blossom: 0xee9ab9, deep: 0xdf6a95, ink: 0x8c2a52 };
@@ -111,6 +111,7 @@ function isFree(x, z, r, { road = 0.12, water = 0.08 } = {}) {
 }
 const take = (x, z, r) => taken.push({ x, z, r });
 for (const [x, z, r] of Object.values(CLEARINGS)) take(x, z, r * 0.6);
+for (const d of DUEL_SPOTS) take(d.x, d.z, ARENA_R + 3); // duel ground stays open
 
 // ---------- vegetation ----------
 
@@ -586,10 +587,10 @@ export function buildWorld(scene) {
   }
 
   // fences along stretches of the main road and the east road
-  fence(B, roadFence(main, 0.06, 0.2, 1, 2.6));
-  fence(B, roadFence(main, 0.1, 0.24, -1, 2.6));
+  fence(B, roadFence(main, 0.04, 0.15, 1, 2.6));
+  fence(B, roadFence(main, 0.07, 0.17, -1, 2.6));
   fence(B, roadFence(main, 0.33, 0.42, 1, 2.4));
-  fence(B, roadFence(roadCurves[2].curve, 0.25, 0.7, 1, 2.0));
+  fence(B, roadFence(roadCurves[2].curve, 0.8, 0.95, 1, 2.0));
   fence(B, roadFence(roadCurves[1].curve, 0.2, 0.55, -1, 2.0));
 
   // cherry trees lining the main road in pairs, then groves across the meadows

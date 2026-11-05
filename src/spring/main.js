@@ -1,14 +1,33 @@
-// Spring map explorer: walk the valley in the pen-and-ink renderer. No combat yet;
-// this is the region the duels, inn and shrine stops will sit in.
+// The Spring map: walk the valley in the pen-and-ink renderer. Fighters wait on the
+// road; walk up to one and the combat prototype's duel plays out right there, then you
+// walk on.
 import * as THREE from 'three';
 import { PenRenderer, flat, noEdges } from '../ink.js';
-import { COLORS } from '../config.js';
-import { FighterModel, POSES, lerpPose } from '../models.js';
+import { COLORS, PLAYER_DEF, RONIN_DEF, SPEARMAN_DEF } from '../config.js';
+import { POSES, lerpPose } from '../models.js';
 import { Sound } from '../audio.js';
-import { buildGround, heightAt, waterAt, CLEARINGS } from './terrain.js';
+import { Fighter } from '../fighter.js';
+import { RoninAI, SpearmanAI } from '../ai.js';
+import { DuelStage } from '../duel.js';
+import { Input } from '../input.js';
+import { Effects } from '../fx.js';
+import { Hud } from '../hud.js';
+import { CONTROLS } from '../player.js';
+import { buildGround, heightAt, waterAt, CLEARINGS, DUEL_SPOTS, ARENA_R, roadCurves } from './terrain.js';
 import { buildWorld, colliders, PINK } from './world.js';
 import { buildGrass } from './grass.js';
+import { DuelCutscene, squareUp } from './cutscene.js';
 
+// who waits at each duel spot on the road
+const FOES = {
+  ronin: { def: RONIN_DEF, look: 'ronin', AI: RoninAI },
+  wanderer: {
+    def: { ...RONIN_DEF, id: 'wanderer', name: 'The Wandering Ronin', title: 'he wants the lookout to himself' },
+    look: 'ronin', AI: RoninAI,
+  },
+  spearman: { def: SPEARMAN_DEF, look: 'spearman', AI: SpearmanAI },
+};
+const CHALLENGE_DIST = 10; // walk this close and the duel begins
 const WALK = 2.6;
 const RUN = 5.6;
 const BOUNDS = 112;
@@ -59,7 +78,10 @@ class Petals {
     for (let i = 0; i < this.p.length; i++) {
       const p = this.p[i];
       p.y -= p.fall * dt;
-      p.x += (0.9 + Math.sin(t * 0.4 + p.ph) * 0.6) * dt;
+      // a gust (the cutscene's last shot) whips them sideways and up
+      const g = this.gust || 0;
+      p.x += (0.9 + Math.sin(t * 0.4 + p.ph) * 0.6 + g * 7) * dt;
+      p.y += g * (0.6 + Math.sin(p.ph * 3) * 0.6) * dt;
       p.z += Math.sin(t * 1.3 + p.ph) * 0.4 * dt;
       p.rx += p.spin * dt;
       p.ry += p.spin * 0.7 * dt;
@@ -102,9 +124,33 @@ class SpringMap {
       this.pen.setSize(innerWidth, innerHeight);
     });
 
-    // the wanderer, sword sheathed, hand resting on the hilt
-    this.model = new FighterModel('player', 'katana');
+    // duels: the combat prototype's stage, run on the map
+    this.input = new Input(canvas);
+    this.sound = new Sound();
+    this.fx = new Effects(this.scene);
+    this.hud = new Hud();
+    this.stage = new DuelStage({
+      scene: this.scene, camera: this.camera, sound: this.sound, hud: this.hud, fx: this.fx, input: this.input,
+      host: { onResult: (won) => this.duelResult(won) },
+    });
+    this.mode = 'explore'; // explore | duel
+
+    // the wanderer: walking, the sword sheathed and a hand on the hilt; in a duel, the
+    // same figure is driven by the combat fighter
+    this.fighter = new Fighter(PLAYER_DEF, 'player', this.stage);
+    this.model = this.fighter.model;
     this.scene.add(this.model.root);
+
+    // fighters waiting on the road, blades drawn, facing the way you will come
+    this.foes = DUEL_SPOTS.map((spot) => {
+      const F = FOES[spot.id];
+      const f = new Fighter(F.def, F.look, this.stage);
+      const tan = roadCurves[spot.road].curve.getTangentAt(spot.t);
+      f.pos.set(spot.x, spot.y, spot.z);
+      f.yaw = Math.atan2(-tan.x, -tan.z);
+      this.scene.add(f.model.root);
+      return { spot, f, AI: F.AI, beaten: false, restYaw: f.yaw };
+    });
     this.pos = new THREE.Vector3(CLEARINGS.gate[0], 0, CLEARINGS.gate[1] - 3);
     this.lastPos = this.pos.clone();
     this.yaw = Math.PI; // face north, up the road
@@ -127,7 +173,6 @@ class SpringMap {
     this.bindMouse(canvas);
 
     this.keys = new Keys();
-    this.sound = new Sound();
     this.time = 0;
     this.stepPhase = 0;
     this.place = null;
@@ -137,7 +182,7 @@ class SpringMap {
     const begin = () => {
       if (this.started) return;
       this.started = true;
-      document.getElementById('screen').classList.add('hidden');
+      this.hud.screenHtml('');
       document.getElementById('hint').classList.remove('hidden');
       this.sound.start();
       canvas.requestPointerLock?.()?.catch?.(() => {});
@@ -382,13 +427,172 @@ class SpringMap {
 
   frame(dt) {
     this.time += dt;
-    this.update(dt);
-    this.updateCamera(dt);
+    if (this.input.pressed.size) this.sound.start();
+    this.handleDuelKeys();
+    // the stage always ticks: it keeps time for the waiting fighters and settles blood
+    this.stage.step(dt);
+    if (this.mode === 'explore') {
+      this.update(dt);
+      this.updateFoes(dt);
+      this.updateCamera(dt);
+    } else if (this.mode === 'cutscene') {
+      if (this.input.wasPressed('Space', 'Enter', 'Escape', 'Mouse0')) this.cut.skip();
+      if (this.cut.update(dt)) this.startDuel(this.foe, true);
+    } else {
+      this.stage.updateCamera(dt);
+    }
+    this.hud.update(dt);
+    // the cutaway keeps the subject in view: the shot's focus in a cutscene, else the wanderer
+    let cut = null;
+    if (this.mode === 'cutscene') cut = this.cutFocus;
+    else if (this.started) {
+      const w = this.mode === 'duel' ? this.fighter.pos : this.pos;
+      cut = new THREE.Vector3(w.x, w.y + 1.1, w.z);
+    }
     this.petals.update(dt, this.time, this.camera.position);
     this.grassMat.uniforms.uTime.value = this.time;
-    this.pen.setCutaway(this.started ? new THREE.Vector3(this.pos.x, this.pos.y + 1.1, this.pos.z) : null);
+    this.pen.setCutaway(cut);
     this.ground.material.uniforms.uTime.value = this.time;
-    this.pen.render(this.time);
+    if (!this.skipRender) this.pen.render(this.time); // tests can step without drawing
+    this.input.endFrame();
+  }
+
+  // ---------- duels on the road ----------
+
+  // Waiting fighters turn to watch you come; close enough and the duel begins.
+  updateFoes(dt) {
+    for (const foe of this.foes) {
+      const f = foe.f;
+      if (foe.beaten) continue;
+      const d = Math.hypot(this.pos.x - f.pos.x, this.pos.z - f.pos.z);
+      const want = d < 28 ? Math.atan2(this.pos.x - f.pos.x, this.pos.z - f.pos.z) : foe.restYaw;
+      let dy = want - f.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      f.yaw += dy * (1 - Math.exp(-3 * dt));
+      f.updateModel(dt);
+      if (this.started && d < 18 && !foe.announced) {
+        foe.announced = true;
+        this.placeEl.innerHTML = `<b>${f.def.name}</b><span>${f.def.title}. Walk up to him to duel.</span>`;
+        this.placeEl.classList.add('show');
+        clearTimeout(this.placeTimer);
+        this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 3200);
+      }
+      if (d > 30) foe.announced = false;
+      if (this.started && d < CHALLENGE_DIST) this.challenge(foe);
+    }
+  }
+
+  // He has seen you: the cutscene plays, then the duel.
+  challenge(foe) {
+    this.mode = 'cutscene';
+    this.foe = foe;
+    this.vel.set(0, 0, 0);
+    this.fighter.reset();
+    foe.f.reset();
+    this.placeEl.classList.remove('show');
+    document.getElementById('hint').classList.add('hidden');
+    this.fx.groundY = foe.spot.y;
+    this.cut = new DuelCutscene(this, foe);
+  }
+
+  // placed: the cutscene has already squared the two up
+  startDuel(foe, placed = false) {
+    this.mode = 'duel';
+    this.foe = foe;
+    const { spot, f } = foe;
+    const p = this.fighter;
+    if (!placed) {
+      // rising again: square up fresh from where you stood before
+      p.reset();
+      f.reset();
+      squareUp(this, foe);
+    }
+    this.fx.groundY = spot.y;
+    this.stage.start(p, f, foe.AI, { arena: { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y }, intro: placed ? 0.6 : 1.6, announce: !placed });
+    this.stage.updateCamera(10); // cut straight to the shoulder shot
+  }
+
+  duelResult(won) {
+    const name = this.foe.f.def.name;
+    // free the mouse so the buttons can be clicked
+    if (document.pointerLockElement) document.exitPointerLock();
+    const left = this.foes.filter((o) => !o.beaten && o !== this.foe).length;
+    const html = won
+      ? `<div class="card"><h2>${name} falls.</h2>
+        <p class="sub">${left ? `${left} more ${left === 1 ? 'blade waits' : 'blades wait'} on the road` : 'the road to the shrine is open'}</p>
+        <div class="choices row"><button data-act="walk"><b>Walk on</b><kbd>Enter</kbd></button></div></div>`
+      : `<div class="card"><h2>The road ends here.</h2>
+        <p class="sub">Slain by ${name}</p>
+        <div class="choices row">
+          <button data-act="retry"><b>Rise again</b><kbd>R</kbd></button>
+          <button data-act="gate"><b>Back to the gate</b><kbd>G</kbd></button>
+        </div></div>`;
+    this.hud.screenHtml(html);
+    this.hud.screen.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => this.duelAction(b.dataset.act)));
+  }
+
+  duelAction(a) {
+    if (a === 'walk') {
+      this.foe.beaten = true;
+      this.walkOn(this.fighter.pos);
+    } else if (a === 'retry') {
+      this.startDuel(this.foe);
+    } else if (a === 'gate') {
+      this.walkOn(new THREE.Vector3(CLEARINGS.gate[0], 0, CLEARINGS.gate[1] - 3));
+      this.yaw = this.camYaw = Math.PI;
+    } else if (a === 'resume') {
+      this.stage.setPaused(false);
+    }
+  }
+
+  // back to walking, from where the duel left you
+  walkOn(at) {
+    const p = this.fighter;
+    // the loser's foe goes back to waiting where he stood
+    if (!this.foe.beaten) {
+      this.foe.f.reset();
+      this.foe.f.pos.set(this.foe.spot.x, this.foe.spot.y, this.foe.spot.z);
+      this.foe.f.lastPos = this.foe.f.pos.clone();
+    }
+    this.stage.end();
+    this.hud.screenHtml('');
+    this.mode = 'explore';
+    // step back out of his reach so the duel doesn't start again at once
+    this.pos.copy(at);
+    if (!this.foe.beaten) {
+      const s = this.foe.spot;
+      const dx = at.x - s.x, dz = at.z - s.z, r = Math.hypot(dx, dz) || 1;
+      if (r < CHALLENGE_DIST + 1.5) this.pos.set(s.x + (dx / r) * (CHALLENGE_DIST + 1.5), 0, s.z + (dz / r) * (CHALLENGE_DIST + 1.5));
+    }
+    this.lastPos.copy(this.pos);
+    this.yaw = p.yaw;
+    this.camYaw = p.yaw;
+    p.reset(); // wounds come later in the plan; for now you walk on whole
+    p.yaw = this.yaw;
+    this.model.root.rotation.set(0, this.yaw, 0);
+    // ease from the duel guard back to walking with the sword sheathed
+    lerpPose(this.model.cur, this.model.cur, 0, this.pose);
+    this.camNow = null;
+  }
+
+  handleDuelKeys() {
+    const i = this.input, m = this.stage.mode;
+    if (this.mode !== 'duel') return;
+    if (m === 'fight' && i.wasPressed('Escape')) {
+      if (document.pointerLockElement) document.exitPointerLock();
+      const controls = CONTROLS.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+      this.stage.setPaused(true, `<div class="card"><h2>Paused</h2><table class="controls">${controls}</table>
+        <div class="choices row"><button data-act="resume"><b>Resume</b><kbd>Esc</kbd></button>
+        <button data-act="retry"><b>Restart duel</b><kbd>R</kbd></button></div></div>`);
+      this.hud.screen.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => this.duelAction(b.dataset.act)));
+    } else if (m === 'paused') {
+      if (i.wasPressed('Escape')) this.stage.setPaused(false);
+      else if (i.wasPressed('KeyR')) this.startDuel(this.foe);
+    } else if (m === 'result') {
+      if (this.stage.lastResult && i.wasPressed('Enter', 'Space')) this.duelAction('walk');
+      else if (!this.stage.lastResult && i.wasPressed('KeyR')) this.duelAction('retry');
+      else if (!this.stage.lastResult && i.wasPressed('KeyG')) this.duelAction('gate');
+    }
   }
 }
 
