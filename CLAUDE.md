@@ -22,7 +22,8 @@ A 3D third-person samurai dueling roguelike in an ink wash style, drawn like pen
 
 ## Roguelike systems (planned)
 - Map of stops: duel, elite duel, inn (heal/shop), shrine (blessing), dojo (learn techniques), event, boss.
-- Wounds instead of HP: injuries carry between fights (cut arm = slower attacks, etc.), healed only at inns or with items.
+- Wounds instead of HP (built): every cut is a named wound by where it landed (brow, thigh, side, forearm) that takes something away (tells hidden, no evade, guard slips, no draw-cut), for the player and for enemies; they carry between fights and are mended at inns, the teahouse or the hot spring. `src/wounds.js`.
+- Arts, not stat boosts (Miles 2026-11-05: abilities must change the game past stats): techniques, blessings and charms each add a rule (Cutting Down, Answering Blade, Flowing Guard, Second Draw, Slip Inside, Iron Gate; Petal, Wind, Fox, Rice; Bell, Sageo). Kept as ids in def.arts, checked with Fighter.has().
 - Build from: techniques (3 equipped), swords with traits, charms (passives), vows (power with restrictions).
 - Honor system: bow before duels or strike first/cheat; high and low honor unlock different paths.
 - Meta-progression: on death the sword passes to a new wanderer (lineage), gaining a permanent trait; a home dojo unlocks techniques, swords, and characters between runs.
@@ -33,7 +34,7 @@ A pen and ink look: black ink on paper tones, hatched shading, hand-drawn ink ou
 ## Current plan (build in this order)
 1. ~~Combat prototype: one player, one sword, two enemies (Ronin, Spearman).~~ Done: see README.md for controls and the code map. All tuning numbers live in `src/config.js` and `src/ai.js`.
 2. One region (Spring) with its map stops, techniques, and the Petal Blade boss. **Done except the boss.** `spring.html` + `src/spring/` is a long valley (south gate to great shrine, ~560 m; layout in `src/spring/layout.js`): a river in a carved channel with a red bridge, a bamboo forest, a climb, and a tunnel of red torii to the great shrine. Six fighters wait on the road: the Ronin, a second ronin on the lookout road, the Spearman, the Bamboo Bandit, and two elites with 3 vitality (the Masked Duelist and the Temple Guard, a sohei spearman). Walking up to one plays a short cutscene, then the duel starts in place on 13 m of level ground (`src/duel.js` runs a duel for both pages; `src/spring/cutscene.js` is the cutscene). Eight stops sit right beside the main road (Miles: never so far out of the way that nobody would go): inn, two dojos (one technique each), two shrines (one blessing each), hot spring, dice player, teahouse (charms); `src/spring/stops.js` holds the run state and the offers. Duels pay coin, vitality carries between duels, and death ends the journey (a new wanderer at the gate; "Rise again" is practice and forfeits that purse). M opens the road map. Next: the Petal Blade at the great shrine's forecourt (`SHRINE` in layout.js; the great-shrine stop card in stops.js is the placeholder).
-3. Wounds and upgrades.
+3. Wounds and upgrades. Started: wounds and the twelve arts above are in. Still to do: swords with traits, vows, techniques equipped in 3 slots.
 4. Later: other regions, lineage, honor, unlockable characters.
 
 ## Working notes

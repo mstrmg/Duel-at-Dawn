@@ -194,12 +194,12 @@ function buildYari() {
   return { group: g, tip: new THREE.Vector3(0, 0, 2.06), length: 2.06 };
 }
 
-function glintTexture() {
+function glintTexture(fill = '#b3171d') {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
   g.translate(64, 64);
-  g.fillStyle = '#b3171d';
+  g.fillStyle = fill;
   for (let i = 0; i < 4; i++) {
     g.save();
     g.rotate((i * Math.PI) / 2);
@@ -216,6 +216,7 @@ function glintTexture() {
   return new THREE.CanvasTexture(c);
 }
 let glintTex = null;
+let paleTex = null; // fox-fire: a feint seen for what it is
 
 function bannerTexture() {
   const c = document.createElement('canvas');
@@ -518,7 +519,10 @@ export class FighterModel {
     if (this.flag) this.flag.rotation.z = Math.sin(this.gait * 0.5) * 0.06;
   }
 
-  setGlint(amount) {
+  // pale: fox-fire shows a feint in a cold blue instead of red
+  setGlint(amount, pale = false) {
+    const map = pale ? (paleTex ??= glintTexture('#6ea8c0')) : glintTex;
+    if (map && this.glint.material.map !== map) { this.glint.material.map = map; this.glint.material.needsUpdate = true; }
     const s = amount <= 0 ? 0.001 : 0.25 + amount * 0.75;
     this.glint.scale.setScalar(s);
     this.glint.material.opacity = Math.min(1, amount * 1.4);

@@ -21,6 +21,7 @@ import { buildGrass } from './grass.js';
 import { DuelCutscene, squareUp } from './cutscene.js';
 import { newRun, stopCard, take, COIN, START_COIN } from './stops.js';
 import { RoadMap } from './map.js';
+import { WOUNDS } from '../wounds.js';
 
 // who waits at each duel spot on the road. purse: coin he carries; elite: a harder duel
 const FOES = {
@@ -548,7 +549,8 @@ class SpringMap {
     this.foe = foe;
     this.vel.set(0, 0, 0);
     this.fighter.reset();
-    this.fighter.vitality = this.run.vit; // wounds come with you into the duel
+    this.fighter.wounds = this.run.wounds.slice(); // wounds come with you into the duel
+    this.fighter.vitality = this.run.vit;
     foe.f.reset();
     this.near = null;
     this.roadMap.toggle(false);
@@ -568,6 +570,7 @@ class SpringMap {
     if (!placed) {
       // rising again: square up fresh, as you were when the duel began
       p.reset();
+      p.wounds = this.run.wounds.slice();
       p.vitality = this.run.vit;
       f.reset();
       squareUp(this, foe);
@@ -589,18 +592,18 @@ class SpringMap {
       this.foe.paid = paid = true;
       this.run.coin += purse;
       this.run.won++;
-      this.run.vit = Math.max(1, this.fighter.vitality);
-    } else if (won) {
-      this.run.vit = Math.max(1, this.fighter.vitality);
-    } else {
+    } else if (!won) {
       // rising again is practice: beat him after that and his purse is not yours
       this.foe.paid = true;
     }
-    const wounded = this.run.vit < this.run.def.vitality;
+    // whatever wounds you took stay with you
+    const fresh = won ? this.fighter.wounds.filter((w) => !this.run.wounds.includes(w)) : [];
+    if (won) this.run.wounds = this.fighter.wounds.slice(0, this.run.def.vitality - 1);
     const html = won
       ? `<div class="card"><h2>${name} falls.</h2>
         <p class="sub">${left ? `${left} more ${left === 1 ? 'blade waits' : 'blades wait'} on the road` : 'the road to the shrine is open'}</p>
-        <p class="purse">${paid ? `+${purse} ${COIN} from his purse` : 'no purse: you fell to him once already'}${wounded ? ' · your wounds stay with you until you rest' : ''}</p>
+        <p class="purse">${paid ? `+${purse} ${COIN} from his purse` : 'no purse: you fell to him once already'}</p>
+        ${fresh.length ? `<p class="say">He cut you: ${fresh.map((w) => `${WOUNDS[w].name.toLowerCase()}, ${WOUNDS[w].text}`).join('; ')}. Wounds stay until they are mended.</p>` : ''}
         <div class="choices row"><button data-act="walk"><b>Walk on</b><kbd>Enter</kbd></button></div></div>`
       : `<div class="card"><h2>The road ends here.</h2>
         <p class="sub">Slain by ${name}</p>
@@ -674,6 +677,7 @@ class SpringMap {
     this.yaw = p.yaw;
     this.camYaw = p.yaw;
     p.reset();
+    p.wounds = this.run.wounds.slice();
     p.vitality = this.run.vit;
     p.yaw = this.yaw;
     this.model.root.rotation.set(0, this.yaw, 0);
@@ -743,13 +747,15 @@ class SpringMap {
     this.runEl.classList.toggle('hidden', !show);
     if (!show) return;
     const r = this.run;
+    const spent = r.def.petalSpent ? 'Blessing of the Petal' : null;
     const marks = [...r.techniques, ...r.blessings, ...r.charms];
-    const key = `${r.coin}|${r.vit}|${r.def.vitality}|${marks.join()}`;
+    const key = `${r.coin}|${r.wounds.join()}|${r.def.vitality}|${marks.join()}|${spent}`;
     if (key === this.runKey) return;
     this.runKey = key;
     const pips = Array.from({ length: r.def.vitality }, (_, i) => `<i class="${i < r.vit ? '' : 'lost'}"></i>`).join('');
-    marks.splice(0, marks.length, ...marks.map((m) => `<em>${m}</em>`));
-    this.runEl.innerHTML = `<span class="pips">${pips}</span><b>${r.coin} ${COIN}</b>${marks.join('')}`;
+    const wounds = r.wounds.map((w) => `<em class="wound" title="${WOUNDS[w].text}">${WOUNDS[w].name}</em>`);
+    const arts = marks.map((m) => `<em class="${m === spent ? 'spent' : ''}">${m}</em>`);
+    this.runEl.innerHTML = `<span class="pips">${pips}</span><b>${r.coin} ${COIN}</b>${wounds.join('')}${arts.join('')}`;
   }
 
   handleDuelKeys() {

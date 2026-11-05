@@ -1,6 +1,7 @@
 // Resolves a strike at the moment of impact: miss, evade, parry, block, clash or hit.
 import * as THREE from 'three';
 import { PARRY_WINDOW, CLASH_WINDOW, BLOCK_COST, BREATH } from './config.js';
+import { woundFor } from './wounds.js';
 
 const tmp = new THREE.Vector3();
 
@@ -26,6 +27,8 @@ export class Combat {
     const inArc = sweeping || angle < a.arc || lateral < def.def.radius * 0.8;
     if (d > a.reach + def.def.radius * 0.5 + (sweeping ? 1.3 : 0) || !inArc) {
       a.whiffed = true;
+      // evaded out of his reach as the blow fell: Slip Inside, if he knows it
+      if (def.state === 'dodge' && def.dodgeKind === 'evade') def.slipUntil = this.game.time + 0.9;
       ev.emit('whiff', att, def);
       return 'miss';
     }
@@ -33,6 +36,7 @@ export class Combat {
     // a side cut sweeps wide enough to catch a sideways evade
     if (def.invulnerable && !sweeping) {
       a.whiffed = true;
+      def.slipUntil = this.game.time + 0.9; // Slip Inside, if he knows it
       ev.emit('evade', def, att);
       return 'evade';
     }
@@ -54,6 +58,7 @@ export class Combat {
     if (guarded) {
       def.spend((BLOCK_COST[a.weaponKind] ?? 14) * (def.def.blockCost ?? 1));
       def.shove(att, a.kind === 'shove' ? 4.5 : 2.2);
+      def.answerUntil = this.game.time + 0.45; // the Answering Blade, if he knows it
       // a blocked lunge has thrown its weight forward and takes longer to recover
       att.recoverExtra = a.move === 'lunge' ? 0.32 : 0.12;
       if (def.gassed) {
@@ -68,7 +73,20 @@ export class Combat {
     // both blades in the air at once
     if (def.state === 'windup' && def.attack && !a.iai) {
       const left = def.attack.windup - def.t;
-      if (left <= CLASH_WINDOW) {
+      const cutter = att.has('kiriotoshi') ? att : def.has('kiriotoshi') ? def : null;
+      if (left <= CLASH_WINDOW * (cutter ? 1.8 : 1) && a.stance === def.attack.stance && cutter === att) {
+        // Cutting Down: his blade is cut aside and yours goes on to land
+        def.attack = null;
+        def.stagger(0.6);
+        ev.emit('cutdown', att, def);
+      } else if (left <= CLASH_WINDOW * (cutter ? 1.8 : 1) && a.stance === def.attack.stance && cutter === def) {
+        // Cutting Down from the other side: his blade is cut aside and he reels
+        a.whiffed = true;
+        att.attack = null;
+        att.stagger(0.6);
+        ev.emit('cutdown', def, att);
+        return 'cutdown';
+      } else if (left <= CLASH_WINDOW) {
         // blades in the same line meet; in different lines, the first to land wins
         if (a.stance === def.attack.stance) {
           att.attack.whiffed = false;
@@ -103,10 +121,12 @@ export class Combat {
     let dmg = a.damage + (def.vulnerable ? 1 : 0);
     const exposed = def.vulnerable;
     const caught = sweeping;
-    def.takeHit(dmg, att, a.iai ? 6 : 4);
+    const wound = woundFor(a);
+    const took = def.takeHit(dmg, att, a.iai ? 6 : 4, wound);
     a.landed = true;
+    if (!took) return 'spared'; // the Blessing of the Petal
     if (a.iai) att.iaiHit = true;
-    ev.emit('hit', def, att, { dmg, wrongGuard, exposed, killed: !def.alive, move: a.move, caught });
+    ev.emit('hit', def, att, { dmg, wrongGuard, exposed, killed: !def.alive, move: a.move, caught, wounds: def.wounds.slice(-dmg) });
     return 'hit';
   }
 }

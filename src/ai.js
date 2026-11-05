@@ -117,7 +117,8 @@ class EnemyAI {
     this.pressure = this.pressure.filter((t) => now - t < 1.8);
     this.pressure.push(now);
     const press = Math.max(0, this.pressure.length - 2); // 3+ strikes in under 2 s
-    const reaction = rand(P.reaction[0], P.reaction[1]) * Math.max(0.6, 1 - press * 0.12);
+    // blood in his eye: he sees your strike coming late
+    const reaction = rand(P.reaction[0], P.reaction[1]) * Math.max(0.6, 1 - press * 0.12) + (f.wounded('brow') ? 0.14 : 0);
     // read the footwork behind the strike: sidestep a lunge, back out of a side cut,
     // and let a retreating cut go by rather than spend breath on it
     const move = p.attack.move;
@@ -218,7 +219,7 @@ class EnemyAI {
     }
     if (this.stanceTimer > 0) return;
     this.stanceTimer = rand(this.P.stanceEvery[0], this.P.stanceEvery[1]);
-    const s = Math.random() < this.P.readStance ? this.p.displayStance : pick(STANCES);
+    const s = Math.random() < this.P.readStance * (this.f.wounded('brow') ? 0.35 : 1) ? this.p.displayStance : pick(STANCES);
     this.f.setStance(s);
   }
 }
@@ -295,7 +296,10 @@ export class RoninAI extends EnemyAI {
     const feint = !quick && !followUp && Math.random() < 0.12;
     this.commit({ stance: s, windup: quick ? 0.45 : undefined, followUp, quick }, () => {
       // feint: pull the strike before it lands
-      if (feint) this.later(f.attack.windup * rand(0.45, 0.6), () => f.cancelAttack());
+      if (feint) {
+        f.attack.feint = true; // only fox-fire can see it
+        this.later(f.attack.windup * rand(0.45, 0.6), () => f.cancelAttack());
+      }
     });
   }
 }

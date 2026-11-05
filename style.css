@@ -70,6 +70,16 @@ html, body {
 .panel .stances span.guard { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 5px; }
 .panel .stances span.tell { color: var(--red); transform: scale(1.35); }
 
+/* wounds: where you have been cut, and what it takes away */
+.panel .wounds { display: flex; gap: 8px; font-size: 13px; letter-spacing: 0.06em; color: var(--red); min-height: 0; }
+.panel .wounds:empty { display: none; }
+.panel .wounds span { border-bottom: 1.5px solid var(--red); padding-bottom: 1px; }
+/* a cut brow: blood in your eye hides his line */
+#enemy-panel.blind .stances span { color: rgba(179, 23, 29, 0.25) !important; transform: none !important; filter: blur(3px); }
+/* the bell charm */
+#player-panel.bell .name { animation: bell 0.45s ease-out; }
+@keyframes bell { 0% { color: var(--red); transform: scale(1.12); } 100% { color: var(--ink); transform: scale(1); } }
+
 .panel .iai { width: 260px; height: 4px; background: rgba(22, 21, 20, 0.12); opacity: 0; transition: opacity 0.15s; }
 .panel .iai.visible { opacity: 1; }
 .panel .iai .fill { height: 100%; background: var(--ink); }

@@ -1,5 +1,6 @@
 // DOM overlay: vitality, breath, stances, callouts, and the title/result screens.
 import { STANCE_KANJI, STANCE_NAMES, STANCES, BREATH, IAI } from './config.js';
+import { WOUNDS } from './wounds.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,6 +21,7 @@ export class Hud {
     p.innerHTML = `
       <div class="name"></div>
       <div class="pips"></div>
+      <div class="wounds"></div>
       <div class="breath"><div class="fill"></div></div>
       <div class="stances">${STANCES.map((i) => `<span data-s="${i}" title="${STANCE_NAMES[i]}">${STANCE_KANJI[i]}</span>`).join('')}</div>
       ${id === 'player-panel' ? '<div class="iai"><div class="fill"></div></div>' : ''}
@@ -42,6 +44,12 @@ export class Hud {
       pips.innerHTML = Array.from({ length: f.def.vitality }, () => '<i></i>').join('');
     }
     [...pips.children].forEach((c, i) => c.classList.toggle('lost', i >= f.vitality));
+    const wk = f.wounds?.join() ?? '';
+    const wl = p.querySelector('.wounds');
+    if (wl.dataset.k !== wk) {
+      wl.dataset.k = wk;
+      wl.innerHTML = (f.wounds ?? []).map((w) => `<span>${WOUNDS[w].name}</span>`).join('');
+    }
     const fill = p.querySelector('.breath .fill');
     fill.style.width = `${(f.breath / BREATH.max) * 100}%`;
     p.querySelector('.breath').classList.toggle('winded', f.state === 'winded');
@@ -62,6 +70,21 @@ export class Hud {
       iai.classList.toggle('full', f.iaiCharge >= IAI.fullCharge);
       iai.querySelector('.fill').style.width = `${f.iaiCharge * 100}%`;
     }
+  }
+
+  // blood in your eye: hide his line and his tell
+  setBlind(on) {
+    if (on === this.blind) return;
+    this.blind = on;
+    $('enemy-panel').classList.toggle('blind', on);
+  }
+
+  // the bell charm: a small ring flashes on your panel
+  bell() {
+    const p = $('player-panel');
+    p.classList.remove('bell');
+    void p.offsetWidth; // restart the animation
+    p.classList.add('bell');
   }
 
   setInReach(mine, his) {
