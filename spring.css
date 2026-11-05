@@ -1,0 +1,31 @@
+/* Spring map: place names and the controls hint, on top of the shared style.css */
+:root { --pink: #d9608c; }
+
+.card h1 { color: var(--ink); }
+#screen .card .sub { color: var(--pink); }
+#screen { background: rgba(233, 226, 208, 0.7); }
+
+#place {
+  position: fixed; left: 50%; top: 13vh;
+  transform: translate(-50%, 8px);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.9s, transform 0.9s;
+  text-align: center;
+}
+#place.show { opacity: 1; transform: translate(-50%, 0); }
+#place b { font-size: clamp(26px, 4vw, 40px); font-weight: 800; letter-spacing: 0.08em; }
+#place b::after {
+  content: ''; display: block; height: 3px; margin: 6px auto 0; width: 60%;
+  background: var(--pink); border-radius: 2px 6px 1px 4px;
+}
+#place span { color: var(--ink-soft); font-size: 16px; letter-spacing: 0.12em; }
+
+#hint {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  font-size: 14px; color: var(--ink-soft); letter-spacing: 0.08em;
+  pointer-events: none;
+  animation: hint-fade 1s 9s forwards;
+}
+@keyframes hint-fade { to { opacity: 0; } }
