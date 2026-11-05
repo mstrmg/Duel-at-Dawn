@@ -19,7 +19,10 @@ import { flat, noEdges } from '../ink.js';
 import { setShrineBloom } from './world.js';
 
 export const BLOOM = {
-  start: 0.4, // the trees begin bright: he has not taken it all yet
+  start: 0.6, // the trees begin bright: he has not taken it all yet
+  // Miles (2026-11-05): the veil takes two parries to break. From start, and from rebloom
+  // (each time it comes back), two parries (or two cuts into the petals) bring it down.
+  rebloom: 0.6,
   veil: 0.3, // at or above this the petals turn your cuts aside
   siphon: 0.025, // per second, while the duel goes on
   spentHold: 6, // once his color is spent, it stays spent this long before he can draw more
@@ -188,6 +191,7 @@ export class BossFight {
       this.host.hud.say('His color is spent: cut him', 'good', 1.4);
       this.host.sound.ring(0.5, 2.2);
     } else if (before < BLOOM.veil && this.bloom >= BLOOM.veil) {
+      this.bloom = Math.max(this.bloom, BLOOM.rebloom);
       this.host.hud.say('He blooms again', 'bad', 1.0);
     }
     if (this.bloom >= 1 && this.f && !this.f.storm) {
