@@ -45,7 +45,9 @@ export class DuelStage {
   get active() { return this.mode !== 'idle'; }
 
   // Set up a duel between two fighters already placed in the world.
-  start(player, enemy, AI, { arena = null } = {}) {
+  // intro: seconds before "Draw"; announce: call out his name (off when a cutscene did)
+  start(player, enemy, AI, { arena = null, intro = 2.2, announce = true } = {}) {
+    this.introTime = intro;
     this.arena = arena;
     this.player = player;
     this.enemy = enemy;
@@ -62,8 +64,10 @@ export class DuelStage {
     this.modeT = 0;
     this.slow = { scale: 1, t: 0, dur: 0 };
     this.stop = 0;
-    this.hud.say(enemy.def.name, 'intro', 2.0);
-    this.hud.hint(enemy.def.title, 2.0);
+    if (announce) {
+      this.hud.say(enemy.def.name, 'intro', 2.0);
+      this.hud.hint(enemy.def.title, 2.0);
+    }
   }
 
   // Leave duel mode entirely (back to a title screen or to walking).
@@ -314,7 +318,7 @@ export class DuelStage {
     this.time += dt;
     this.modeT += realDt;
 
-    if (this.mode === 'intro' && this.modeT > 2.2) this.beginFight();
+    if (this.mode === 'intro' && this.modeT > (this.introTime ?? 2.2)) this.beginFight();
     if (this.mode === 'kill' && this.modeT > 2.6) this.showResultScreen();
 
     if (this.mode === 'fight' || this.mode === 'kill' || this.mode === 'result' || this.mode === 'intro') {

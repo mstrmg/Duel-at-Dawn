@@ -16,6 +16,7 @@ import { CONTROLS } from '../player.js';
 import { buildGround, heightAt, waterAt, CLEARINGS, DUEL_SPOTS, ARENA_R, roadCurves } from './terrain.js';
 import { buildWorld, colliders, PINK } from './world.js';
 import { buildGrass } from './grass.js';
+import { DuelCutscene, squareUp } from './cutscene.js';
 
 // who waits at each duel spot on the road
 const FOES = {
@@ -26,7 +27,7 @@ const FOES = {
   },
   spearman: { def: SPEARMAN_DEF, look: 'spearman', AI: SpearmanAI },
 };
-const CHALLENGE_DIST = 6.5; // walk this close and the duel begins
+const CHALLENGE_DIST = 10; // walk this close and the duel begins
 const WALK = 2.6;
 const RUN = 5.6;
 const BOUNDS = 112;
@@ -77,7 +78,10 @@ class Petals {
     for (let i = 0; i < this.p.length; i++) {
       const p = this.p[i];
       p.y -= p.fall * dt;
-      p.x += (0.9 + Math.sin(t * 0.4 + p.ph) * 0.6) * dt;
+      // a gust (the cutscene's last shot) whips them sideways and up
+      const g = this.gust || 0;
+      p.x += (0.9 + Math.sin(t * 0.4 + p.ph) * 0.6 + g * 7) * dt;
+      p.y += g * (0.6 + Math.sin(p.ph * 3) * 0.6) * dt;
       p.z += Math.sin(t * 1.3 + p.ph) * 0.4 * dt;
       p.rx += p.spin * dt;
       p.ry += p.spin * 0.7 * dt;
@@ -431,14 +435,23 @@ class SpringMap {
       this.update(dt);
       this.updateFoes(dt);
       this.updateCamera(dt);
+    } else if (this.mode === 'cutscene') {
+      if (this.input.wasPressed('Space', 'Enter', 'Escape', 'Mouse0')) this.cut.skip();
+      if (this.cut.update(dt)) this.startDuel(this.foe, true);
     } else {
       this.stage.updateCamera(dt);
     }
     this.hud.update(dt);
-    const who = this.mode === 'duel' ? this.fighter.pos : this.pos;
+    // the cutaway keeps the subject in view: the shot's focus in a cutscene, else the wanderer
+    let cut = null;
+    if (this.mode === 'cutscene') cut = this.cutFocus;
+    else if (this.started) {
+      const w = this.mode === 'duel' ? this.fighter.pos : this.pos;
+      cut = new THREE.Vector3(w.x, w.y + 1.1, w.z);
+    }
     this.petals.update(dt, this.time, this.camera.position);
     this.grassMat.uniforms.uTime.value = this.time;
-    this.pen.setCutaway(this.started ? new THREE.Vector3(who.x, who.y + 1.1, who.z) : null);
+    this.pen.setCutaway(cut);
     this.ground.material.uniforms.uTime.value = this.time;
     if (!this.skipRender) this.pen.render(this.time); // tests can step without drawing
     this.input.endFrame();
@@ -465,32 +478,38 @@ class SpringMap {
         this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 3200);
       }
       if (d > 30) foe.announced = false;
-      if (this.started && d < CHALLENGE_DIST) this.startDuel(foe);
+      if (this.started && d < CHALLENGE_DIST) this.challenge(foe);
     }
   }
 
-  startDuel(foe) {
+  // He has seen you: the cutscene plays, then the duel.
+  challenge(foe) {
+    this.mode = 'cutscene';
+    this.foe = foe;
+    this.vel.set(0, 0, 0);
+    this.fighter.reset();
+    foe.f.reset();
+    this.placeEl.classList.remove('show');
+    document.getElementById('hint').classList.add('hidden');
+    this.fx.groundY = foe.spot.y;
+    this.cut = new DuelCutscene(this, foe);
+  }
+
+  // placed: the cutscene has already squared the two up
+  startDuel(foe, placed = false) {
     this.mode = 'duel';
     this.foe = foe;
     const { spot, f } = foe;
     const p = this.fighter;
-    p.reset();
-    f.reset();
-    // fight where you met: you stay where you stopped, he holds his ground
-    p.pos.set(this.pos.x, spot.y, this.pos.z);
-    const dx = p.pos.x - spot.x, dz = p.pos.z - spot.z, r = Math.hypot(dx, dz);
-    if (r > ARENA_R - 1) p.pos.set(spot.x + (dx / r) * (ARENA_R - 1), spot.y, spot.z + (dz / r) * (ARENA_R - 1));
-    f.pos.set(spot.x, spot.y, spot.z);
-    p.yaw = Math.atan2(f.pos.x - p.pos.x, f.pos.z - p.pos.z);
-    f.yaw = Math.atan2(p.pos.x - f.pos.x, p.pos.z - f.pos.z);
-    p.lastPos = p.pos.clone();
-    f.lastPos = f.pos.clone();
-    this.vel.set(0, 0, 0);
+    if (!placed) {
+      // rising again: square up fresh from where you stood before
+      p.reset();
+      f.reset();
+      squareUp(this, foe);
+    }
     this.fx.groundY = spot.y;
-    this.placeEl.classList.remove('show');
-    document.getElementById('hint').classList.add('hidden');
-    this.stage.camLook.copy(this.camLook);
-    this.stage.start(p, f, foe.AI, { arena: { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y } });
+    this.stage.start(p, f, foe.AI, { arena: { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y }, intro: placed ? 0.6 : 1.6, announce: !placed });
+    this.stage.updateCamera(10); // cut straight to the shoulder shot
   }
 
   duelResult(won) {

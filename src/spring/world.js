@@ -590,7 +590,7 @@ export function buildWorld(scene) {
   fence(B, roadFence(main, 0.04, 0.15, 1, 2.6));
   fence(B, roadFence(main, 0.07, 0.17, -1, 2.6));
   fence(B, roadFence(main, 0.33, 0.42, 1, 2.4));
-  fence(B, roadFence(roadCurves[2].curve, 0.72, 0.95, 1, 2.0));
+  fence(B, roadFence(roadCurves[2].curve, 0.8, 0.95, 1, 2.0));
   fence(B, roadFence(roadCurves[1].curve, 0.2, 0.55, -1, 2.0));
 
   // cherry trees lining the main road in pairs, then groves across the meadows

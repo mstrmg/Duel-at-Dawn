@@ -32,7 +32,7 @@ A pen and ink look: black ink on paper tones, hatched shading, hand-drawn ink ou
 
 ## Current plan (build in this order)
 1. ~~Combat prototype: one player, one sword, two enemies (Ronin, Spearman).~~ Done: see README.md for controls and the code map. All tuning numbers live in `src/config.js` and `src/ai.js`.
-2. One region (Spring) with 5–6 map stops, a few techniques, and the Petal Blade boss. In progress: the walkable Spring map is built (`spring.html`, `src/spring/`), with duels on it: the Ronin, a second ronin and the Spearman wait at level spots on the road, and walking up to one starts the duel in place (`src/duel.js` runs a duel for both pages). Next: turn the road into the stops (duel, inn, shrine, dojo), then the Petal Blade at the shrine.
+2. One region (Spring) with 5–6 map stops, a few techniques, and the Petal Blade boss. In progress: the walkable Spring map is built (`spring.html`, `src/spring/`), with duels on it: the Ronin, a second ronin and the Spearman wait at level spots on the road, and walking up to one plays a short cutscene, then the duel starts in place on 13 m of level ground (`src/duel.js` runs a duel for both pages; `src/spring/cutscene.js` is the cutscene). Next: turn the road into the stops (duel, inn, shrine, dojo), then the Petal Blade at the shrine.
 3. Wounds and upgrades.
 4. Later: other regions, lineage, honor, unlockable characters.
 
