@@ -1,23 +1,45 @@
 // What each stop beside the road offers. The inn and the teahouse sell rest, bandages and
 // gear for coin; each dojo teaches one technique; each shrine grants one blessing; the hot
-// spring mends wounds; the dice player takes bets.
+// spring mends wounds; the dice player takes bets. What the dojos teach, which blessings the
+// shrines hold and which charms are for sale is rolled fresh for every journey (rollStock).
 //
 // Wounds are the run's vitality: every cut you take in a duel is a named wound (wounds.js)
 // that takes something away until it is mended. Techniques, blessings and charms are arts:
 // each adds a rule to how you fight, kept as an id in the wanderer's def.arts. The inn's
 // sandals and whetstone are the only plain numbers left.
-import { ARTS, WOUNDS } from '../wounds.js';
+import { ARTS, WOUNDS, artsOf } from '../wounds.js';
 import { KINDS } from '../gain.js';
 
 export const COIN = '銭';
 export const START_COIN = 20;
 
-export function newRun(baseDef) {
+// a small seeded generator, so one journey's rolls hang together
+export function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+export function shuffle(list, rand) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export function newRun(baseDef, seed = Math.floor(Math.random() * 2 ** 31)) {
   const def = { ...baseDef, weapon: { ...baseDef.weapon }, arts: [] };
   const run = {
-    coin: START_COIN, wounds: [], def, speed: 1, purseBonus: 0,
+    coin: START_COIN, wounds: [], def, speed: 1, purseBonus: 0, seed,
     techniques: [], blessings: [], charms: [], owned: new Set(), learned: {}, rolls: 0, won: 0,
   };
+  run.stock = rollStock(rng(seed));
   // vitality left: what the wounds have not taken
   Object.defineProperty(run, 'vit', { get() { return Math.max(0, this.def.vitality - this.wounds.length); } });
   return run;
@@ -44,17 +66,35 @@ const TEAHOUSE = [
     buy: (r) => heal(r, 1), say: 'Bitter tea, sweet dango. A wound closes.' },
   { id: 'nap', name: 'Sleep in the back room', text: 'every wound mended', cost: 18, can: hurt,
     buy: (r) => heal(r, 99), say: 'You sleep to the sound of the bamboo.' },
-  art('bell', { cost: 30, once: true, charm: true, say: 'The little bell will ring when steel is coming.' }),
-  art('sageo', { cost: 22, once: true, charm: true, say: 'You rewind the scabbard cord in red silk. The blade turns easier in your hands.' }),
 ];
-const DOJOS = {
-  dojo: [art('kiriotoshi'), art('kaeshi'), art('ryusui')],
-  dojo2: [art('nidan'), art('irimi'), art('teppeki')],
+// the charms, each with its price and what is said as you buy it
+const CHARMS = {
+  bell: { cost: 30, say: 'The little bell will ring when steel is coming.' },
+  sageo: { cost: 22, say: 'You rewind the scabbard cord in red silk. The blade turns easier in your hands.' },
+  tsuba: { cost: 26, say: 'A heavy iron guard, black and pitted. It sits well against your hand.' },
+  metsubushi: { cost: 16, say: 'A paper twist of pepper and ash, tucked in your sleeve.' },
+  hachimaki: { cost: 12, say: 'A strip of white cotton, tied tight above the eyes.' },
 };
-const SHRINES = {
-  shrine: [art('petal'), art('wind')],
-  fox: [art('fox'), art('rice', { buy: (r) => { r.def.arts.push('rice'); r.purseBonus += 15; } })],
-};
+const charm = (id, rand) => art(id, { cost: CHARMS[id].cost + Math.round((rand() - 0.5) * 8), once: true, charm: true, say: CHARMS[id].say });
+const blessing = (id) => (id === 'rice' ? art('rice', { buy: (r) => { r.def.arts.push('rice'); r.purseBonus += 15; } }) : art(id));
+const DOJO_IDS = ['dojo', 'dojo2'];
+const SHRINE_IDS = ['shrine', 'fox', 'falls'];
+
+// A journey's stock: each dojo teaches three of the techniques (never the same three), each
+// shrine holds two of the blessings, the teahouse sells two charms and the inn one, beside
+// one piece of gear.
+export function rollStock(rand) {
+  const stock = {};
+  const tech = shuffle(artsOf('technique'), rand);
+  DOJO_IDS.forEach((id, i) => { stock[id] = tech.slice(i * 3, i * 3 + 3).map((t) => art(t)); });
+  const bless = shuffle(artsOf('blessing'), rand);
+  SHRINE_IDS.forEach((id, i) => { stock[id] = bless.slice(i * 2, i * 2 + 2).map(blessing); });
+  const charms = shuffle(artsOf('charm'), rand);
+  stock.teahouse = [...TEAHOUSE, charm(charms[0], rand), charm(charms[1], rand)];
+  const gear = INN.filter((o) => o.id === 'sandals' || o.id === 'whetstone');
+  stock.inn = [...INN.filter((o) => !gear.includes(o)), gear[Math.floor(rand() * gear.length)], charm(charms[2], rand)];
+  return stock;
+}
 const ONSEN = [
   { id: 'soak', name: 'Soak in the spring', text: 'mends two wounds; once a journey', once: true, can: hurt,
     buy: (r) => heal(r, 2), say: 'The heat goes into your bones. Two wounds close.' },
@@ -65,12 +105,9 @@ const GAMBLER = [
 ];
 const MAX_ROLLS = 3;
 
-function list(stop) {
+function list(stop, run) {
   switch (stop.kind) {
-    case 'inn': return INN;
-    case 'teahouse': return TEAHOUSE;
-    case 'dojo': return DOJOS[stop.id];
-    case 'shrine': return SHRINES[stop.id];
+    case 'inn': case 'teahouse': case 'dojo': case 'shrine': return run.stock[stop.id] ?? [];
     case 'onsen': return ONSEN;
     case 'gambler': return GAMBLER;
     default: return [];
@@ -80,7 +117,7 @@ function list(stop) {
 // The offers at a stop, each with whether it can be taken now and why not.
 export function offers(stop, run) {
   const chosen = run.learned[stop.id];
-  return list(stop).map((o) => {
+  return list(stop, run).map((o) => {
     let why = null;
     if (stop.kind === 'dojo' || stop.kind === 'shrine') why = chosen ? (chosen === o.name ? 'yours' : 'one only') : null;
     else if (o.once && run.owned.has(o.id)) why = o.charm ? 'bought' : 'done';
@@ -115,6 +152,7 @@ export function take(stop, run, i, roll = Math.random) {
 
 const GREETING = {
   inn: ['rest, eat, and buy for the road', 'The innkeeper bows. "A long road, by the look of you."'],
+  falls: ['a shrine behind the falling water', 'Spray drifts over the offering box. The water roars.'],
   teahouse: ['tea, a bed, and charms for travelers', 'The old woman pours before you ask. "Up the mountain? Drink first."'],
   dojo: ['a master teaches one technique', 'The master looks you over. "One thing. Choose it well."'],
   shrine: ['a blessing for the road', 'Petals on the offering box. The bell rope sways.'],
@@ -129,7 +167,7 @@ const DONE = {
 export function stopCard(stop, run, note = null) {
   if (stop.kind === 'great') return greatCard(stop, run);
   const items = offers(stop, run);
-  const [sub, line] = GREETING[stop.kind];
+  const [sub, line] = GREETING[stop.id] ?? GREETING[stop.kind];
   const done = run.learned[stop.id] ? DONE[stop.kind] : null;
   const say = note ?? done ?? line;
   const buttons = items.map((o, i) => `

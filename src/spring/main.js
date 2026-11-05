@@ -15,11 +15,12 @@ import { Input } from '../input.js';
 import { Effects } from '../fx.js';
 import { Hud } from '../hud.js';
 import { CONTROLS } from '../player.js';
-import { buildGround, heightAt, waterAt, CLEARINGS, STOPS, DUEL_SPOTS, ARENA_R, roadCurves, MAP, GATE, SHRINE } from './terrain.js';
+import { buildGround, heightAt, waterAt, CLEARINGS, STOPS, DUEL_SPOTS, AMBUSH_SPOTS, FALLS_POOL, ARENA_R, roadCurves, MAP, GATE, SHRINE } from './terrain.js';
+import { AMBUSH_COUNT, BURNED_FARM, beside } from './layout.js';
 import { buildWorld, colliders, PINK } from './world.js';
 import { buildGrass } from './grass.js';
 import { DuelCutscene, squareUp } from './cutscene.js';
-import { newRun, stopCard, take, COIN, START_COIN } from './stops.js';
+import { newRun, stopCard, take, COIN, START_COIN, rng, shuffle } from './stops.js';
 import { RoadMap } from './map.js';
 import { WOUNDS, ARTS } from '../wounds.js';
 import { showGain, KINDS } from '../gain.js';
@@ -49,7 +50,30 @@ const FOES = {
       weapon: { ...SPEARMAN_DEF.weapon, reach: 3.7, windup: 0.72, counterWindup: 0.64, recover: 0.72 } },
     look: 'sohei', AI: SpearmanAI,
   },
+  // the side paths
+  deserter: {
+    def: { ...RONIN_DEF, id: 'deserter', name: 'The Deserter', title: "he ran from his lord's war with a great field sword", purse: 35, speed: 2.3,
+      weapon: { ...RONIN_DEF.weapon, reach: 2.75, windup: 0.74, counterWindup: 0.64, recover: 0.7, lunge: 1.2 } },
+    look: 'deserter', AI: RoninAI,
+  },
+  yamabushi: {
+    def: { ...SPEARMAN_DEF, id: 'yamabushi', name: 'The Yamabushi', title: 'a mountain ascetic who keeps the falls', purse: 30, speed: 2.6,
+      weapon: { ...SPEARMAN_DEF.weapon, reach: 3.3, windup: 0.7, counterWindup: 0.62, recover: 0.7 } },
+    look: 'yamabushi', AI: SpearmanAI,
+  },
 };
+// Ambushers: weaker men who lie in wait off the road and jump out at you. One cut kills
+// them, their blades are slow, and they carry little. No color of their own.
+const AMBUSHERS = [
+  { def: { ...RONIN_DEF, id: 'thug', name: 'A Highwayman', title: 'out of the brush with a blade', vitality: 1, purse: 10, speed: 2.5,
+    weapon: { ...RONIN_DEF.weapon, reach: 2.05, windup: 0.74, counterWindup: 0.66, recover: 0.68 } }, look: 'thug', AI: RoninAI },
+  { def: { ...RONIN_DEF, id: 'hungry', name: 'A Starving Ronin', title: 'he wants your purse more than your life', vitality: 1, purse: 8, speed: 2.4,
+    weapon: { ...RONIN_DEF.weapon, reach: 2.15, windup: 0.7, counterWindup: 0.62, recover: 0.66 } }, look: 'hungry', AI: RoninAI },
+  { def: { ...SPEARMAN_DEF, id: 'ashigaru', name: 'A Runaway Footsoldier', title: 'a spear and nothing else left to him', vitality: 1, purse: 12, speed: 2.2,
+    weapon: { ...SPEARMAN_DEF.weapon, reach: 3.2, windup: 0.92, counterWindup: 0.84, recover: 0.9 } }, look: 'ashigaru', AI: SpearmanAI },
+];
+const AMBUSH_DIST = 9; // walk this close to where one lies in wait and he springs
+const LEAP = 0.7; // how long his leap out of hiding takes
 const CHALLENGE_DIST = 10; // walk this close and the duel begins
 const WALK = 2.6;
 const RUN = 5.6;
@@ -74,6 +98,11 @@ const PLACES = [
   { name: 'The Climb', sub: 'pines, stone, and the road turning on itself', at: [-14, -262], r: 14 },
   at('dojo2', 11, 'a stricter master, higher up'),
   at('fox', 8, 'two stone foxes keep watch'),
+  { name: 'The Hill Path', sub: 'east over the shoulder of the hill', at: [14, -68], r: 7 },
+  { name: 'The Burned Farm', sub: 'the war came through here, and nobody came back', at: (() => { const b = beside(BURNED_FARM.t, BURNED_FARM.side, BURNED_FARM.off, 0, roadCurves[3].curve); return [b.x, b.z]; })(), r: 13 },
+  { name: 'The Waterfall Path', sub: 'west, toward the sound of falling water', at: [-14, -222], r: 7 },
+  { name: 'The Falls', sub: 'cold water off the mountain, and a rope across it', at: [FALLS_POOL.x + 6, FALLS_POOL.z], r: 13 },
+  at('falls', 8, 'a shrine behind the falling water'),
   { name: 'The Thousand Torii', sub: 'red gates all the way to the shrine', at: [2, -372], r: 9 },
   { name: 'Shrine of the Petal Blade', sub: 'the end of the spring road', at: CLEARINGS.shrine, r: 18 },
 ];
@@ -199,6 +228,8 @@ class SpringMap {
       this.scene.add(f.model.root);
       return { spot, f, AI: F.AI, beaten: false, restYaw: f.yaw };
     });
+    this.ambushers = [];
+    this.setupAmbushes();
     this.pos = new THREE.Vector3(START[0], 0, START[1]);
     this.lastPos = this.pos.clone();
     this.yaw = Math.PI; // face north, up the road
@@ -487,12 +518,17 @@ class SpringMap {
       else if (this.roadMap.open && this.input.wasPressed('Escape')) this.roadMap.toggle(false);
       this.update(dt);
       this.updateFoes(dt);
+      if (this.mode === 'explore') this.checkAmbushes();
       this.updateStops();
       this.updateCamera(dt);
     } else if (this.mode === 'stop') {
       this.update(dt);
       this.updateCamera(dt);
       this.handleStopKeys();
+    } else if (this.mode === 'ambush') {
+      this.update(dt);
+      this.updateAmbush(dt);
+      this.updateCamera(dt);
     } else if (this.mode === 'cutscene') {
       if (this.input.wasPressed('Space', 'Enter', 'Escape', 'Mouse0')) this.cut.skip();
       if (this.cut.update(dt)) this.startDuel(this.foe, true);
@@ -513,7 +549,7 @@ class SpringMap {
     this.grass.update(this.camera.position);
     this.water.update(dt, this.time);
     if (this.roadMap.open) this.roadMap.draw({ x: this.pos.x, z: this.pos.z, yaw: this.yaw },
-      this.foes.map((o) => ({ x: o.spot.x, z: o.spot.z, beaten: o.beaten, elite: o.f.def.elite })));
+      [...this.foes, ...this.ambushers.filter((o) => o.sprung)].map((o) => ({ x: o.spot.x, z: o.spot.z, beaten: o.beaten, elite: o.f.def.elite })));
     this.pen.setCutaway(cut);
     this.ground.material.uniforms.uTime.value = this.time;
     if (!this.skipRender) this.pen.render(this.time); // tests can step without drawing
@@ -545,6 +581,104 @@ class SpringMap {
     }
   }
 
+  // ---------- ambushes ----------
+
+  // Every journey, a few of the hiding places off the road hold a man in wait.
+  setupAmbushes() {
+    for (const a of this.ambushers) this.scene.remove(a.f.model.root);
+    const rand = rng(this.run.seed ^ 0x5bd1e995);
+    const chosen = [];
+    for (const spot of shuffle(AMBUSH_SPOTS, rand)) {
+      if (chosen.length >= AMBUSH_COUNT) break;
+      if (chosen.some((c) => Math.hypot(c.x - spot.x, c.z - spot.z) < 26)) continue;
+      chosen.push(spot);
+    }
+    this.ambushers = chosen.map((spot) => {
+      const A = AMBUSHERS[Math.floor(rand() * AMBUSHERS.length)];
+      const f = new Fighter(A.def, A.look, this.stage);
+      f.pos.set(spot.hide[0], heightAt(spot.hide[0], spot.hide[1]), spot.hide[1]);
+      f.model.root.visible = false; // crouched out of sight behind the thicket
+      this.scene.add(f.model.root);
+      return { spot, f, AI: A.AI, beaten: false, sprung: false, ambush: true };
+    });
+  }
+
+  // Close enough to where one hides: he leaps out onto the road in front of you.
+  checkAmbushes() {
+    if (!this.started) return;
+    for (const a of this.ambushers) {
+      if (a.beaten) continue;
+      const d = Math.hypot(this.pos.x - a.spot.x, this.pos.z - a.spot.z);
+      if (!a.sprung && d < AMBUSH_DIST) return this.spring(a);
+      // one who sprang and was not beaten waits on the road like any other fighter
+      if (a.sprung && Math.hypot(this.pos.x - a.f.pos.x, this.pos.z - a.f.pos.z) < CHALLENGE_DIST) return this.challenge(a);
+      if (a.sprung) a.f.updateModel(0);
+    }
+  }
+
+  spring(a) {
+    this.mode = 'ambush';
+    this.foe = a;
+    a.sprung = true;
+    this.vel.set(0, 0, 0);
+    this.roadMap.toggle(false);
+    this.promptEl.classList.remove('show');
+    const f = a.f;
+    f.reset();
+    f.model.root.visible = true;
+    const from = new THREE.Vector3(a.spot.hide[0], heightAt(a.spot.hide[0], a.spot.hide[1]), a.spot.hide[1]);
+    const dir = new THREE.Vector3().subVectors(from, this.pos).setY(0);
+    const gap = Math.min(5.5, dir.length() - 0.5);
+    dir.normalize();
+    const to = this.pos.clone().addScaledVector(dir, gap);
+    to.y = heightAt(to.x, to.z);
+    this.leap = { t: 0, from, to };
+    f.pos.copy(from);
+    this.sound.whoosh();
+    this.sound.ring(0.6, 0.7);
+    this.placeEl.innerHTML = `<b>Ambush!</b><span>${f.def.name}, ${f.def.title}</span>`;
+    this.placeEl.classList.add('show');
+    clearTimeout(this.placeTimer);
+    this.placeTimer = setTimeout(() => this.placeEl.classList.remove('show'), 2600);
+  }
+
+  // the leap out of hiding, then the duel, right where he lands
+  updateAmbush(dt) {
+    const a = this.foe, f = a.f, L = this.leap;
+    L.t += dt;
+    const k = Math.min(1, L.t / LEAP);
+    f.pos.lerpVectors(L.from, L.to, k);
+    f.pos.y += Math.sin(Math.PI * k) * 1.5;
+    f.yaw = Math.atan2(this.pos.x - f.pos.x, this.pos.z - f.pos.z);
+    f.updateModel(dt);
+    f.model.body.position.y -= Math.sin(Math.PI * k) * 0.25; // tucked in the air
+    // the wanderer and the camera turn to him
+    const want = Math.atan2(f.pos.x - this.pos.x, f.pos.z - this.pos.z);
+    let dy = want - this.yaw;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    this.yaw += dy * (1 - Math.exp(-8 * dt));
+    let dc = want - this.camYaw;
+    dc = Math.atan2(Math.sin(dc), Math.cos(dc));
+    this.camYaw += dc * (1 - Math.exp(-6 * dt));
+    this.model.root.rotation.y = this.yaw;
+    if (L.t - dt < LEAP && L.t >= LEAP) this.sound.thud(); // he lands
+    if (L.t >= LEAP + 0.3) {
+      const p = this.fighter;
+      p.reset();
+      p.wounds = this.run.wounds.slice();
+      p.vitality = this.run.vit;
+      p.pos.copy(this.pos);
+      f.pos.copy(L.to);
+      p.yaw = Math.atan2(f.pos.x - p.pos.x, f.pos.z - p.pos.z);
+      f.yaw = Math.atan2(p.pos.x - f.pos.x, p.pos.z - f.pos.z);
+      p.lastPos = p.pos.clone();
+      f.lastPos = f.pos.clone();
+      document.getElementById('hint').classList.add('hidden');
+      this.placeEl.classList.remove('show');
+      this.startDuel(a, true, true);
+    }
+  }
+
   // He has seen you: the cutscene plays, then the duel.
   challenge(foe) {
     this.mode = 'cutscene';
@@ -564,7 +698,7 @@ class SpringMap {
   }
 
   // placed: the cutscene has already squared the two up
-  startDuel(foe, placed = false) {
+  startDuel(foe, placed = false, announce = !placed) {
     this.mode = 'duel';
     this.foe = foe;
     const { spot, f } = foe;
@@ -578,7 +712,7 @@ class SpringMap {
       squareUp(this, foe);
     }
     this.fx.groundY = spot.y;
-    this.stage.start(p, f, foe.AI, { arena: { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y }, intro: placed ? 0.6 : 1.6, announce: !placed });
+    this.stage.start(p, f, foe.AI, { arena: { x: spot.x, z: spot.z, r: ARENA_R, y: spot.y }, intro: placed && !announce ? 0.6 : 1.6, announce });
     this.stage.updateCamera(10); // cut straight to the shoulder shot
   }
 
@@ -601,11 +735,18 @@ class SpringMap {
     // whatever wounds you took stay with you
     const fresh = won ? this.fighter.wounds.filter((w) => !this.run.wounds.includes(w)) : [];
     if (won) this.run.wounds = this.fighter.wounds.slice(0, this.run.def.vitality - 1);
+    // the Blessing of the Moon: a duel won mends a wound
+    let mended = null;
+    if (won && this.run.def.arts.includes('moon') && this.run.wounds.length) {
+      mended = this.run.wounds.shift();
+      showGain('mended', WOUNDS[mended].name, ARTS.moon.name);
+    }
     const html = won
       ? `<div class="card"><h2>${name} falls.</h2>
         <p class="sub">${left ? `${left} more ${left === 1 ? 'blade waits' : 'blades wait'} on the road` : 'the road to the shrine is open'}</p>
         <p class="purse">${paid ? `+${purse} ${COIN} from his purse` : 'no purse: you fell to him once already'}</p>
         ${fresh.length ? `<p class="say">He cut you: ${fresh.map((w) => `${WOUNDS[w].name.toLowerCase()}, ${WOUNDS[w].text}`).join('; ')}. Wounds stay until they are mended.</p>` : ''}
+        ${mended ? `<p class="say">Moonlight on the blade: your ${WOUNDS[mended].name.toLowerCase()} closes.</p>` : ''}
         <div class="choices row"><button data-act="walk"><b>Walk on</b><kbd>Enter</kbd></button></div></div>`
       : `<div class="card"><h2>The road ends here.</h2>
         <p class="sub">Slain by ${name}</p>
@@ -645,6 +786,7 @@ class SpringMap {
       o.f.yaw = o.restYaw;
     }
     this.foe = null;
+    this.setupAmbushes();
     this.walkOn(new THREE.Vector3(START[0], 0, START[1]));
     this.yaw = this.camYaw = Math.PI;
     this.fighter.yaw = this.yaw;

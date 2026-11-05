@@ -9,9 +9,9 @@ import { COLORS } from '../config.js';
 import { hatch, flat, noEdges, seeded } from '../ink.js';
 import {
   heightAt, roadAt, waterAt, roadCurves, streamCurve, CLEARINGS, STOPS, MAP, inMap, DUEL_SPOTS, ARENA_R,
-  riverAt, RIVER_HW, POOL, SHRINE, GATE, mainRoad,
+  riverAt, RIVER_HW, POOL, SHRINE, GATE, mainRoad, AMBUSH_SPOTS, FALLS_POOL,
 } from './terrain.js';
-import { tAtZ, TORII_RUN, BAMBOO } from './layout.js';
+import { tAtZ, beside, TORII_RUN, BAMBOO, BURNED_FARM } from './layout.js';
 import { PINK } from './palette.js';
 import { buildWater } from './water.js';
 import { roofGeometry, gableGeometry, roofHeight } from './roofs.js';
@@ -48,6 +48,9 @@ const MAT = {
   leaf: hatch(0.36, COLORS.paper, 0.8),
   torii: hatch(0.7, COLORS.red, 1, { fill: 0.95, ink: 0x2a0708 }),
   red: hatch(0.7, COLORS.red, 1, { fill: 0.95, ink: 0x2a0708 }),
+  charred: hatch(0.1),
+  ash: hatch(0.3, COLORS.paper, 0.8),
+  thicket: hatch(0.3, COLORS.paper, 0.9),
 };
 
 // ---------- static batching ----------
@@ -147,6 +150,8 @@ function isFree(x, z, r, { road = 0.12, water = 0.08 } = {}) {
 const take = (x, z, r) => taken.push({ x, z, r });
 for (const [x, z, r] of Object.values(CLEARINGS)) take(x, z, r * 0.8);
 for (const d of DUEL_SPOTS) take(d.x, d.z, ARENA_R + 3); // duel ground stays open
+for (const a of AMBUSH_SPOTS) take(a.x, a.z, ARENA_R - 2); // and so does the ground where an ambush may fall
+take(FALLS_POOL.x, FALLS_POOL.z, FALLS_POOL.r + 4);
 
 // ---------- vegetation ----------
 
@@ -900,6 +905,114 @@ function greatShrine(scene, B) {
 
 // ---------- the whole valley ----------
 
+// Where an ambusher lies in wait: a thicket and a boulder off the road, dense enough to hide
+// a man crouching behind them.
+function thicket(B, x, z, ry) {
+  const y = heightAt(x, z);
+  const p = new THREE.Matrix4().compose(v1.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), v2.set(1, 1, 1));
+  B.put(GEO.rock, MAT.stoneDark, -1.4, 0.45, 0.3, rand() * 3, rand() * 3, 0, 1.3, 1.0, 1.1, p);
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * 6.28 + rand() * 0.5, r = rr(0.3, 1.3);
+    const s = rr(0.7, 1.1);
+    B.put(GEO.blob, k % 3 ? MAT.thicket : MAT.leaf, Math.cos(a) * r + 0.5, 0.55 + rr(0, 0.5), Math.sin(a) * r * 0.7, rand() * 3, rand() * 3, 0, s, s * 0.85, s, p);
+  }
+  for (let k = 0; k < 5; k++) B.put(GEO.blob, MAT.azalea, rr(-0.6, 1.6), rr(0.9, 1.4), rr(0.4, 0.9), 0, 0, 0, 0.3, 0.25, 0.3, p);
+  v1.set(0.3, 0, 0).applyMatrix4(p);
+  addCircle(v1.x, v1.z, 1.4);
+  take(x, z, 2.6);
+}
+
+// The burned farm on the hill path: a house the war went through, its thatch fallen in
+// over charred posts, a well, and a cart left where it broke.
+function burnedFarm(scene, B, x, z, ry) {
+  const y = heightAt(x, z);
+  const p = new THREE.Matrix4().compose(v1.set(x, y, z), q.setFromEuler(e.set(0, ry, 0)), v2.set(1, 1, 1));
+  const W = 8, D = 5.5;
+  // the stone footing, and the floor black with ash
+  B.put(GEO.box, MAT.stoneDark, 0, 0.12, 0, 0, 0, 0, W + 0.4, 0.34, D + 0.4, p);
+  B.put(GEO.box, MAT.ash, 0, 0.3, 0, 0, 0, 0, W, 0.04, D, p);
+  // charred posts, some broken short, a couple leaning
+  const posts = [[-W / 2, -D / 2], [0, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [-W / 6, D / 2], [W / 6, D / 2], [W / 2, D / 2], [-W / 2, 0], [W / 2, 0]];
+  posts.forEach(([px, pz], i) => {
+    const h = [3.1, 1.4, 2.6, 2.2, 0.9, 3.0, 1.7, 2.8, 1.1][i];
+    const lean = i === 2 ? 0.25 : i === 7 ? -0.18 : 0;
+    B.put(GEO.box, MAT.charred, px, 0.3 + h / 2, pz, 0, 0, lean, 0.22, h, 0.22, p);
+  });
+  // a beam still up between two posts, another fallen across the floor
+  B.put(GEO.box, MAT.charred, -W / 4, 3.05, D / 2, 0, 0, 0.05, W / 2 + 0.3, 0.2, 0.2, p);
+  B.put(GEO.box, MAT.charred, 0.6, 0.55, 0.4, 0.1, 0.7, 0.18, 0.2, 0.2, W * 0.7, p);
+  // the roof: one thatched slope slid down the back and onto the ground
+  const r = new THREE.Matrix4().compose(v1.set(0.4, 0.3, -1.2), q.setFromEuler(e.set(0.32, 0, 0.06)), v2.set(1, 1, 1)).premultiply(p);
+  B.add(roofGeometry({ A: W / 2 + 0.4, Bz: D / 2 + 0.6, h: 1.1, thick: 0.3, curve: 0.1 }), MAT.thatch, r);
+  for (let k = 0; k < 7; k++) B.put(GEO.blob, MAT.ash, rr(-W / 2, W / 2), 0.35, rr(-D / 2, D / 2), 0, rand() * 3, 0, rr(0.4, 0.9), 0.12, rr(0.4, 0.8), p);
+  // the well, its bucket still on the rope
+  const [wx, wz] = [W / 2 + 3, D / 2 + 1.5];
+  B.put(GEO.cyl6, MAT.stone, wx, 0.4, wz, 0, 0, 0, 0.75, 0.8, 0.75, p);
+  B.put(GEO.cyl6, MAT.charred, wx, 0.82, wz, 0, 0, 0, 0.55, 0.06, 0.55, p);
+  for (const sx of [-1, 1]) B.put(GEO.box, MAT.wood, wx + sx * 0.6, 1.3, wz, 0, 0, 0, 0.1, 1.8, 0.1, p);
+  B.put(GEO.box, MAT.wood, wx, 2.2, wz, 0, 0, 0, 1.4, 0.1, 0.1, p);
+  B.put(GEO.cyl6, MAT.wood, wx + 0.1, 1.15, wz, 0, 0, 0, 0.18, 0.24, 0.18, p);
+  // the broken cart: a box on one wheel, the other wheel flat in the grass
+  const [cx, cz] = [-W / 2 - 3.2, D / 2 + 1.2];
+  B.put(GEO.box, MAT.wood, cx, 0.55, cz, 0, 0.4, 0.22, 2.0, 0.12, 1.1, p);
+  B.put(GEO.box, MAT.wood, cx - 1.5, 0.45, cz - 0.5, 0, 0.4, 0.1, 1.6, 0.08, 0.08, p);
+  const wheel = new THREE.TorusGeometry(0.5, 0.06, 5, 14);
+  B.put(wheel, MAT.woodDark, cx + 0.2, 0.5, cz + 0.65, 0, 0.4, 0, 1, 1, 1, p);
+  B.put(wheel, MAT.woodDark, cx + 1.4, 0.08, cz - 1.0, Math.PI / 2, 0, 0, 1, 1, 1, p);
+  // a broken fence round the yard
+  fence(B, [rotXZ(x, z, ry, -W / 2 - 1, -D / 2 - 3), rotXZ(x, z, ry, W / 2 + 2, -D / 2 - 3), rotXZ(x, z, ry, W / 2 + 5, 0)], { gap: 0.45 });
+  for (const [ax, az] of [[-W / 2 - 1, -D / 2], [W / 2 + 1, -D / 2]]) {
+    v1.set(ax, 0, az).applyMatrix4(p);
+    addCircle(v1.x, v1.z, 0.6);
+  }
+  v1.set(0, 0, 0).applyMatrix4(p);
+  for (let k = -1; k <= 1; k++) { v2.set(k * W / 3, 0, 0).applyMatrix4(p); addCircle(v2.x, v2.z, 1.4); }
+  v2.set(wx, 0, wz).applyMatrix4(p);
+  addCircle(v2.x, v2.z, 0.85);
+  take(x, z, 9);
+  // a dead pine by the house, and grave markers for whoever lived here
+  const [px2, pz2] = rotXZ(x, z, ry, -W / 2 - 2, -D / 2 - 1.5);
+  B.limb(GEO.limb, MAT.charred, new THREE.Vector3(px2, heightAt(px2, pz2), pz2), new THREE.Vector3(px2 + 0.5, heightAt(px2, pz2) + 4.5, pz2 + 0.2), 0.2);
+  for (let k = 0; k < 3; k++) {
+    const [gx, gz] = rotXZ(x, z, ry, W / 2 + 1.2 + k * 0.8, -D / 2 - 1.5);
+    B.put(GEO.box, MAT.wood, gx, heightAt(gx, gz) + 0.45, gz, 0, ry, rr(-0.08, 0.08), 0.14, 0.9, 0.05);
+  }
+}
+
+// The falls: water dropping off a horseshoe of rock into a pool, a sacred rope strung
+// across the lip, and stones round the rim.
+function waterfall(B) {
+  const F = FALLS_POOL;
+  // the cliff face: rock stacked up the horseshoe so the slope reads as stone
+  for (let a = Math.PI * 0.45; a <= Math.PI * 1.55; a += 0.16) {
+    if (Math.abs(a - Math.PI) < 0.24) continue; // the notch the water falls through
+    const d = F.r + 1.6 + rr(-0.3, 0.4);
+    const x = F.x + Math.cos(a) * d, z = F.z + Math.sin(a) * d;
+    const base = F.level - 0.2;
+    const top = heightAt(F.x + Math.cos(a) * (F.r + 3.2), F.z + Math.sin(a) * (F.r + 3.2));
+    for (let y = base; y < top; y += rr(1.2, 1.8)) {
+      const s = rr(0.9, 1.5);
+      B.put(GEO.rock, rand() < 0.5 ? MAT.stoneDark : MAT.stone, x + rr(-0.4, 0.4), y + s * 0.4, z + rr(-0.4, 0.4), rand() * 3, rand() * 3, rand() * 3, s * 1.3, s * 0.9, s * 1.2);
+    }
+  }
+  // stones round the rim of the pool, on the open side
+  for (let a = -Math.PI * 0.5; a <= Math.PI * 0.5; a += 0.22) {
+    const d = F.r + rr(0.2, 0.9);
+    rock(B, F.x + Math.cos(a) * d, F.z + Math.sin(a) * d, rr(0.3, 0.7), MAT.stoneDark);
+  }
+  // the lip of the falls, and a shimenawa rope with paper streamers across it
+  const lipY = heightAt(F.x - F.r - 3.2, F.z);
+  const lx = F.x - F.r - 1.9;
+  B.put(GEO.box, MAT.stoneDark, lx - 0.4, lipY - 0.2, F.z, 0, 0, 0, 1.6, 0.6, 3.6);
+  B.limb(GEO.pole, MAT.thatch, new THREE.Vector3(lx, lipY + 1.4, F.z - 2.4), new THREE.Vector3(lx, lipY + 1.4, F.z + 2.4), 0.07);
+  for (const sz of [-2.4, 2.4]) B.limb(GEO.pole, MAT.woodDark, new THREE.Vector3(lx, lipY, F.z + sz), new THREE.Vector3(lx, lipY + 1.6, F.z + sz), 0.07);
+  for (let k = 0; k < 4; k++) B.put(GEO.box, MAT.plaster, lx + 0.05, lipY + 1.12, F.z - 1.5 + k, 0, 0, 0.1, 0.02, 0.4, 0.12);
+  // pines leaning out over the drop
+  pine(B, F.x - F.r - 6, F.z - 5, 1.2);
+  pine(B, F.x - F.r - 5, F.z + 6, 1.1);
+  weepingCherry(B, F.x + 2, F.z + F.r + 4, 1.4);
+}
+
 export function buildWorld(scene) {
   const B = new Batcher();
   const main = mainRoad;
@@ -1034,6 +1147,25 @@ export function buildWorld(scene) {
       }
     }
     greatShrine(scene, B);
+  }
+
+  // ---- the side paths: the burned farm on the hill path, the falls and their shrine on
+  // the waterfall path, and signposts where they leave the road
+  {
+    const fc = roadCurves[BURNED_FARM.road].curve;
+    const b = beside(BURNED_FARM.t, BURNED_FARM.side, BURNED_FARM.off, 0, fc);
+    burnedFarm(scene, B, b.x, b.z, b.ry);
+    waterfall(B);
+    const W = STOPS.falls;
+    hokora(scene, B, W.x, W.z, W.ry);
+    const sign = (road, t, side, signs) => {
+      const c = roadCurves[road].curve, pt = c.getPointAt(t), tan = c.getTangentAt(t);
+      signpost(scene, B, pt.x - tan.z * side * 2.4, pt.z + tan.x * side * 2.4, signs);
+    };
+    sign(3, 0.03, -1, [['丘 →', 0]]);
+    sign(4, 0.03, 1, [['滝 ←', 0]]);
+    // where an ambusher may hide
+    for (const a of AMBUSH_SPOTS) thicket(B, a.hide[0], a.hide[1], a.ry);
   }
 
   // ---- fences along stretches of road

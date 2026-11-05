@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { COLORS } from '../config.js';
 import { LIGHT_DIR } from '../ink.js';
-import { MAP, ROADS, roadCurves, riverCurve, mainRoad, tAtZ, beside, DUEL_PLAN, STOP_PLAN, SHRINE, GATE } from './layout.js';
+import { MAP, ROADS, roadCurves, riverCurve, mainRoad, tAtZ, beside, DUEL_PLAN, STOP_PLAN, AMBUSH_PLAN, SHRINE, GATE, FALLS } from './layout.js';
 
 export { MAP, roadCurves, riverCurve, mainRoad, SHRINE, GATE };
 export const streamCurve = riverCurve;
@@ -148,9 +148,19 @@ export const DUEL_SPOTS = DUEL_PLAN.map((d) => {
   const p = roadCurves[road].curve.getPointAt(t);
   return { id: d.id, road, t, x: p.x, z: p.z, y: baseHeight(p.x, p.z) - 0.12 };
 });
+// Where an ambusher may lie in wait: level ground on the road like a duel spot, and a hiding
+// place 9 m off one side of it (behind a thicket the world puts there).
+export const AMBUSH_SPOTS = AMBUSH_PLAN.map((a, i) => {
+  const road = a.road ?? 0;
+  const c = roadCurves[road].curve;
+  const t = a.t ?? tAtZ(a.z);
+  const p = c.getPointAt(t);
+  const h = beside(t, a.side, 9, 0, c);
+  return { id: `ambush${i}`, road, t, side: a.side, x: p.x, z: p.z, y: baseHeight(p.x, p.z) - 0.12, hide: [h.x, h.z], ry: h.ry };
+});
 // the stops beside the road, each facing it across a trodden yard
 export const STOPS = Object.fromEntries(STOP_PLAN.map((s) => {
-  const b = beside(tAtZ(s.z), s.side, s.off, s.depth);
+  const b = beside(s.t ?? tAtZ(s.z), s.side, s.off, s.depth, roadCurves[s.road ?? 0].curve);
   return [s.id, { ...s, ...b, y: baseHeight(b.x, b.z) }];
 }));
 export const CLEARINGS = { lookout: [66, 12, 11], shrine: [SHRINE.x, SHRINE.z, SHRINE.r], gate: [GATE.x, GATE.z, 6] };
@@ -164,14 +174,24 @@ for (const s of Object.values(STOPS)) {
 // level pads: ground that is flattened to one height, blending out to the hills around
 const PADS = [
   ...DUEL_SPOTS.map((s) => ({ x: s.x, z: s.z, y: s.y, r0: ARENA_R + 2, r1: ARENA_R + 8 })),
+  ...AMBUSH_SPOTS.map((s) => ({ x: s.x, z: s.z, y: s.y, r0: ARENA_R, r1: ARENA_R + 7 })),
   ...Object.values(STOPS).map((s) => ({ x: s.x, z: s.z, y: s.y - 0.05, r0: s.size, r1: s.size + 7 })),
   { x: SHRINE.x, z: SHRINE.z - 6, y: baseHeight(SHRINE.x, SHRINE.z) - 0.1, r0: SHRINE.r + 6, r1: SHRINE.r + 16 },
 ];
 // the hot spring's pool: a bowl of steaming water by its bathhouse
 export const POOL = (() => {
   const s = STOPS.onsen;
-  return { x: s.x, z: s.z, r: 3.6, level: s.y - 0.3 };
+  return { x: s.x, z: s.z, r: 3.6, level: s.y - 0.3, steam: true };
 })();
+// the pool under the waterfall on the waterfall path, with a cliff standing round its far side
+export const FALLS_POOL = { x: FALLS.x, z: FALLS.z, r: FALLS.pool, level: baseHeight(FALLS.x, FALLS.z) - 0.5, cliff: 9 };
+export const POOLS = [POOL, FALLS_POOL];
+// the cliff: a horseshoe of rock round the west side of the falls pool
+function cliffAt(x, z) {
+  const F = FALLS_POOL, dx = x - F.x, d = Math.hypot(dx, z - F.z);
+  return F.cliff * smooth(F.r + 0.6, F.r + 2.6, d) * smooth(2, -4, dx) * (1 - smooth(F.r + 10, F.r + 20, d));
+}
+export const cliffHeight = cliffAt;
 
 const pixels = g.getImageData(0, 0, canvas.width, canvas.height).data;
 export const maskTexture = new THREE.CanvasTexture(canvas);
@@ -190,14 +210,14 @@ function sampleMask(x, z, ch) {
 export const roadAt = (x, z) => Math.min(1, sampleMask(x, z, 0) * 1.25);
 // 1 in the water, 0.5 at the water line, 0 up the bank
 export function waterAt(x, z) {
-  const pd = Math.hypot(x - POOL.x, z - POOL.z);
-  const pool = 1 - smooth(POOL.r - 0.6, POOL.r + 0.2, pd);
+  let pool = 0;
+  for (const P of POOLS) pool = Math.max(pool, 1 - smooth(P.r - 0.6, P.r + 0.2, Math.hypot(x - P.x, z - P.z)));
   const r = riverAt(x, z);
   return Math.max(pool, r ? 1 - smooth(RIVER_HW, RIVER_HW + 1.4, r.d) : 0);
 }
 // the water surface height at a point in the water (the river or the pool)
 export function waterLevelAt(x, z) {
-  if (Math.hypot(x - POOL.x, z - POOL.z) < POOL.r + 1) return POOL.level;
+  for (const P of POOLS) if (Math.hypot(x - P.x, z - P.z) < P.r + 1) return P.level;
   const r = riverAt(x, z);
   return r ? r.level : -Infinity;
 }
@@ -218,13 +238,17 @@ export function heightAt(x, z) {
     const target = d < RIVER_HW ? L - 0.45 - 0.85 * (1 - (d / RIVER_HW) ** 2) : L - 0.45 + (d - RIVER_HW) * 0.62;
     h = Math.min(h, target);
   }
-  // the hot spring's pool
-  const pd = Math.hypot(x - POOL.x, z - POOL.z);
-  if (pd < POOL.r + 1.5) h = Math.min(h, POOL.level - 0.15 - 0.6 * (1 - Math.min(1, pd / POOL.r) ** 2) + Math.max(0, pd - POOL.r) * 0.6);
+  // the falls' cliff, then the pools: the hot spring's, and the one under the falls
+  h += cliffAt(x, z);
+  for (const P of POOLS) {
+    const pd = Math.hypot(x - P.x, z - P.z);
+    if (pd < P.r + 1.5) h = Math.min(h, P.level - 0.15 - 0.6 * (1 - Math.min(1, pd / P.r) ** 2) + Math.max(0, pd - P.r) * 0.6);
+  }
   return h;
 }
 export function duelSpotNear(x, z, pad = 0) {
-  return DUEL_SPOTS.find((s) => Math.hypot(x - s.x, z - s.z) < ARENA_R + pad);
+  return DUEL_SPOTS.find((s) => Math.hypot(x - s.x, z - s.z) < ARENA_R + pad) ??
+    AMBUSH_SPOTS.find((s) => Math.hypot(x - s.x, z - s.z) < ARENA_R - 3 + pad);
 }
 // inside the mapped valley (minus a margin)?
 export const inMap = (x, z, m = 0) => x > MAP.x0 + m && x < MAP.x1 - m && z > MAP.z0 + m && z < MAP.z1 - m;

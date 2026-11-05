@@ -50,6 +50,9 @@ export function nextWound(have, want) {
   return WOUND_ORDER.find((w) => !have.includes(w)) ?? want;
 }
 
+// the arts by kind, for the stops to draw their offers from
+export const artsOf = (kind) => Object.keys(ARTS).filter((id) => ARTS[id].kind === kind);
+
 // Every art, by id: its name and what it does, for the stops and the HUD.
 export const ARTS = {
   // the Willow Dojo
@@ -60,12 +63,22 @@ export const ARTS = {
   nidan: { kind: 'technique', name: 'Second Draw', text: 'after a draw-cut, strike again at once: a miss no longer leaves you open' },
   irimi: { kind: 'technique', name: 'Slip Inside', text: 'evade a blow as it lands and your next strike cannot be guarded' },
   teppeki: { kind: 'technique', name: 'Iron Gate', text: 'strike out of your guard and the guard stays up in that line through your windup' },
+  // taught at either dojo, whichever the master favors this season
+  zanshin: { kind: 'technique', name: 'Remaining Mind', text: 'land a cut and your guard comes up on its own, ready for his answer' },
+  uchiotoshi: { kind: 'technique', name: 'Striking Down', text: 'a perfect parry knocks his blade down: his next strike comes slow' },
+  mikiri: { kind: 'technique', name: "Hair's Breadth", text: 'evade a blow at the last instant and time slows around you' },
+  tsubame: { kind: 'technique', name: 'Swallow Return', text: 'a side cut that misses swings straight back the other way' },
   // the shrines
   petal: { kind: 'blessing', name: 'Blessing of the Petal', text: 'once a journey, the petals take a killing blow for you' },
   wind: { kind: 'blessing', name: 'Blessing of the Wind', text: 'the first time you would be winded in a duel, your breath comes back full' },
   fox: { kind: 'blessing', name: 'Blessing of the Fox', text: 'fox-fire: you see through his feints, his glint burns pale when he means to pull it' },
   rice: { kind: 'blessing', name: 'Blessing of the Rice', text: '+15 銭 from every duel you win' },
+  pine: { kind: 'blessing', name: 'Blessing of the Pine', text: 'the first cut in every duel only grazes you: no wound' },
+  moon: { kind: 'blessing', name: 'Blessing of the Moon', text: 'every duel you win mends one wound' },
   // the teahouse's charms
   bell: { kind: 'charm', name: 'Bell charm', text: 'a little bell rings at the moment to raise your parry' },
   sageo: { kind: 'charm', name: 'Red sageo cord', text: 'Q or E during your own windup turns the cut into the other line' },
+  tsuba: { kind: 'charm', name: 'Iron tsuba', text: 'block a thrust or a lunge and he reels back, open' },
+  metsubushi: { kind: 'charm', name: 'Blinding powder', text: 'once a duel, evade while he winds up and his strike goes wide' },
+  hachimaki: { kind: 'charm', name: 'White headband', text: 'a cut brow no longer runs into your eye: you see his tells' },
 };

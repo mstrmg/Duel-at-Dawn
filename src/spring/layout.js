@@ -17,6 +17,11 @@ export const ROADS = [
   { w: 1.7, pts: [[-8, 18], [-24, 12], [-38, 0], [-46, -22], [-44, -44], [-38, -66], [-28, -88], [-15, -110]] },
   // east to the lookout
   { w: 2.2, pts: [[-5, 4], [12, 0], [30, 8], [46, 2], [62, 10]] },
+  // the hill path: east from the bridge, up over the shoulder past the burned farm, and down
+  // into the end of the bamboo
+  { w: 1.9, pts: [[-1, -62], [14, -68], [32, -80], [46, -98], [54, -122], [52, -146], [42, -166], [26, -180], [15, -186]] },
+  // the waterfall path: west off the climb, round the pool under the falls, and back
+  { w: 1.9, pts: [[4, -216], [-14, -222], [-34, -234], [-50, -252], [-56, -274], [-48, -294], [-32, -310], [-24, -326], [-10, -333], [6, -331]] },
 ];
 // the river runs west to east across the valley floor
 export const RIVER = { pts: [[-150, -28], [-110, -40], [-80, -30], [-52, -46], [-26, -38], [-4, -46], [18, -40], [44, -54], [70, -42], [100, -52], [150, -44]] };
@@ -40,8 +45,8 @@ export function tAtZ(z, c = mainRoad) {
 
 // A spot beside the main road: off meters to one side (-1 west, 1 east), facing the road.
 // ry turns a building so its door (local +z) faces the road; door: where you stand to go in.
-export function beside(t, side, off, depth = 0) {
-  const p = mainRoad.getPointAt(t), tan = mainRoad.getTangentAt(t);
+export function beside(t, side, off, depth = 0, c = mainRoad) {
+  const p = c.getPointAt(t), tan = c.getTangentAt(t);
   const nx = -tan.z * side, nz = tan.x * side;
   const x = p.x + nx * off, z = p.z + nz * off;
   return { t, x, z, ry: Math.atan2(-nx, -nz), door: [x - nx * depth, z - nz * depth], road: [p.x, p.z] };
@@ -55,7 +60,24 @@ export const DUEL_PLAN = [
   { id: 'bandit', z: -150 },
   { id: 'masked', z: -282 },
   { id: 'sohei', z: -346 },
+  // the side paths' own fighters
+  { id: 'deserter', road: 3, t: 0.52 },
+  { id: 'yamabushi', road: 4, t: 0.36 },
 ];
+// Predetermined spots where an ambusher may lie in wait, off one side of the road (side);
+// every journey a few of them are taken at random (see AMBUSH_COUNT).
+export const AMBUSH_PLAN = [
+  { z: 62, side: 1 },
+  { z: -170, side: -1 },
+  { z: -230, side: 1 },
+  { road: 1, t: 0.3, side: -1 },
+  { road: 1, t: 0.74, side: 1 },
+  { road: 3, t: 0.22, side: 1 },
+  { road: 3, t: 0.8, side: -1 },
+  { road: 4, t: 0.12, side: -1 },
+  { road: 4, t: 0.8, side: 1 },
+];
+export const AMBUSH_COUNT = 5;
 // the stops, in the order you meet them; all a few steps off the main road
 export const STOP_PLAN = [
   { id: 'inn', kind: 'inn', name: 'Plum Hill Inn', z: 46, side: -1, off: 10, depth: 4.4, size: 7 },
@@ -66,7 +88,12 @@ export const STOP_PLAN = [
   { id: 'teahouse', kind: 'teahouse', name: 'Bamboo Teahouse', z: -206, side: -1, off: 10, depth: 4.4, size: 7 },
   { id: 'dojo2', kind: 'dojo', name: 'Cliffside Dojo', z: -246, side: 1, off: 11, depth: 5.4, size: 8.5 },
   { id: 'fox', kind: 'shrine', name: 'Fox Shrine', z: -310, side: -1, off: 7, depth: 2.2, size: 3 },
+  // on the waterfall path
+  { id: 'falls', kind: 'shrine', name: 'Waterfall Shrine', road: 4, t: 0.58, side: 1, off: 7, depth: 2.2, size: 3 },
 ];
+// the side paths' set pieces
+export const BURNED_FARM = { road: 3, t: 0.36, side: 1, off: 13 }; // a farm the war passed through
+export const FALLS = { x: -70, z: -270, pool: 7 }; // the pool under the falls, west of the path
 export const SHRINE = { x: 0, z: -444, r: 15 }; // the great shrine's forecourt, where the Petal Blade will wait
 export const GATE = { x: 4, z: 118 };
 export const TORII_RUN = [-364, -424]; // the tunnel of red torii on the last approach (z)

@@ -310,8 +310,30 @@ export class DuelStage {
     // ----- arts -----
     ev.on('art', (f, id) => {
       if (!isP(f)) return;
-      const say = { nidan: 'Second draw', kaeshi: 'Answer', irimi: 'Inside his guard' }[id];
+      const say = {
+        nidan: 'Second draw', kaeshi: 'Answer', irimi: 'Inside his guard', zanshin: 'Guard up',
+        uchiotoshi: 'Struck down', tsubame: 'Swallow return', tsuba: 'Stopped dead',
+      }[id];
       if (say) hud.say(say, 'good', 0.6);
+      if (id === 'tsuba') { snd.ring(1, 0.6); this.hitstop(0.08); }
+    });
+    ev.on('graze', (f, from) => {
+      snd.ring(0.8, 1.6);
+      fx.spark(contact(f, from), 14);
+      this.hitstop(0.1);
+      hud.say(isP(f) ? 'Only a graze' : 'He is only grazed', isP(f) ? 'good' : 'bad', 1.2);
+      if (isP(f)) hud.hint(`${ARTS.pine.name}: the first cut of the duel leaves no wound.`, 2.2);
+    });
+    ev.on('mikiri', (f) => {
+      if (!isP(f)) return;
+      snd.ring(0.4, 2);
+      this.slowmo(0.3, 0.8);
+      hud.say("Hair's breadth", 'good', 0.7);
+    });
+    ev.on('powder', (f, o) => {
+      snd.whoosh();
+      fx.spark(tmp.copy(o.pos).setY(o.pos.y + 1.6), 24);
+      hud.say(isP(f) ? 'Powder in his eyes' : 'Powder in your eyes', isP(f) ? 'good' : 'bad', 1.2);
     });
     ev.on('cutdown', (winner, loser) => {
       snd.ring(1.5, 1.1);
@@ -396,7 +418,7 @@ export class DuelStage {
       this.bell();
     }
     // blood in your eye: his line and his tell are hidden on the HUD too
-    this.hud.setBlind(!!this.player?.wounded('brow') && this.active);
+    this.hud.setBlind(!!this.player?.wounded('brow') && !this.player.has('hachimaki') && this.active);
     this.updateArcs();
     this.fx.update(dt, realDt);
     return dt;
