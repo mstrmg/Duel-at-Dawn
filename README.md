@@ -66,6 +66,36 @@ The arts:
 - `src/spring/cutscene.js`: the shots before a duel on the road
 - `src/duel.js`: one duel wherever it happens (event wiring, AI, hit-stop and slow-mo, reach arcs, the duel camera). Both pages use it
 
+## The Summer map
+
+`summer.html` is the Summer region (open `/summer.html` under `npm run dev`, or the single file `dist/summer-map.html`). It is the rainy season: a valley with about 720 m of road from the boat bridge to the hydrangea temple, a little longer than Spring's. Showers come and go as you walk (ink strokes of rain, rings opening on puddles, paddies and river, the mist closing in while it pours, a hiss that rises and falls, and in a real downpour a white flash of lightning and thunder after it). Hydrangeas, blue and violet, are Summer's accent. The boss, the Rain Painter, is not built yet: the temple courtyard is where he will wait, and beating him will color the wanderer's sword (scabbard, hilt wrap and cord in hydrangea blue-violet).
+
+The road, south to north:
+
+1. **The river farms** below the river, then **the boat bridge**: planks laid over moored boats across the swollen river. **The landing** past it.
+2. **The Stilt Teahouse** over the paddies, **the rice terraces** stepping down to the river on the west, **the lotus pond** east of the road, and **the Frog Shrine**. **The terrace path** leaves the road west at the landing, along the terraces past **the water wheel**, and comes back below the village.
+3. **The lantern village**: a street of houses with strings of red lanterns, **the Lantern Inn** and **the Masked Stranger's Mat** (odd or even with a man in a fox mask).
+4. **The bamboo forest**, with **the Bamboo Dojo** and **the Dragon Shrine**. **The bamboo path** leaves the road east at the end of the village, deep into the bamboo to **the moss garden** (an old temple garden gone to moss, with **the Moss Shrine**), and back to the road above the ford.
+5. **The ford**: the river crosses the road again, on stepping stones.
+6. **The climb** under the cedars: **the Pilgrims' Lodge** and **the Cedar Dojo**.
+7. **The hydrangea steps**, flowers and stone lanterns all the way up, to **the hydrangea temple** (紫陽寺): its gate, hall, bell tower and courtyard.
+
+**Fighters are dealt at random every journey.** Four spots on the road take one of the four road fighters each, two elite spots take one of the two elites, and the side paths keep their own:
+
+- Road: **the Rain Drifter** (a ronin in a straw cape; yellow), **the Wandering Monk** (naginata; orange), **the Boatman** (boat hook; teal), **the Sickle Man** (a farmhand's sickle; green).
+- Elites, 3 vitality: **the Retainer** (two swords, no master; violet) and **the Armored Abbot** (who keeps the temple steps; crimson).
+- Side paths: **the Kusarigama Farmer** on the terrace path (chain and sickle; blue) and **the Umbrella Ronin** in the moss garden (umbrella furled on his back; slate blue).
+
+They fight in the way of the Ronin or the Spearman for now; their own tricks (the chain, the umbrella, the second sword) come next. Eleven hiding places can hold an ambusher (a paddy hand, a highwayman or a runaway footsoldier), and six are manned each journey. Wading through a paddy slows you. The stops work as in Spring and their offers are rolled the same way (two dojos, three shrines, two inns, a teahouse). F skips to the temple.
+
+- `src/summer/layout.js`: the plan of the valley: roads, the river, duel, ambush and stop spots, set pieces
+- `src/summer/terrain.js`: the height field (terraced slopes, the climb, the steps), the rice paddies (`PADDIES`, `paddyAt`), the road mask and the ground shader
+- `src/summer/water.js`: the river, the lotus pond, the still water of the paddies, ripples
+- `src/summer/rain.js`: the showers (`rainAt`), drops, splash rings, puddles, mist, hiss, lightning and thunder
+- `src/summer/world.js`: trees, willows, cedars, bamboo, hydrangeas, the boat bridge, the village, the water wheel, the moss garden and the temple; colliders
+- `src/summer/grass.js`: grass, reeds, and rice planted in rows in the paddies
+- `src/summer/map.js`, `src/summer/main.js`: the road map; walking, the roster deal, stops and duels (the cutscene and the stops are Spring's, from `src/spring/`)
+
 ## Controls
 
 | Input | Action |

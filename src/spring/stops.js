@@ -33,13 +33,14 @@ export function shuffle(list, rand) {
   return a;
 }
 
-export function newRun(baseDef, seed = Math.floor(Math.random() * 2 ** 31)) {
+// ids: which stops share out the stock (see rollStock); Summer has its own
+export function newRun(baseDef, seed = Math.floor(Math.random() * 2 ** 31), ids = STOCK_IDS) {
   const def = { ...baseDef, weapon: { ...baseDef.weapon }, arts: [] };
   const run = {
     coin: START_COIN, wounds: [], def, speed: 1, purseBonus: 0, seed,
     techniques: [], blessings: [], charms: [], owned: new Set(), learned: {}, rolls: 0, won: 0,
   };
-  run.stock = rollStock(rng(seed));
+  run.stock = rollStock(rng(seed), ids);
   // vitality left: what the wounds have not taken
   Object.defineProperty(run, 'vit', { get() { return Math.max(0, this.def.vitality - this.wounds.length); } });
   return run;
@@ -77,22 +78,25 @@ const CHARMS = {
 };
 const charm = (id, rand) => art(id, { cost: CHARMS[id].cost + Math.round((rand() - 0.5) * 8), once: true, charm: true, say: CHARMS[id].say });
 const blessing = (id) => (id === 'rice' ? art('rice', { buy: (r) => { r.def.arts.push('rice'); r.purseBonus += 15; } }) : art(id));
-const DOJO_IDS = ['dojo', 'dojo2'];
-const SHRINE_IDS = ['shrine', 'fox', 'falls'];
+// the Spring valley's stops that hold stock
+export const STOCK_IDS = { dojos: ['dojo', 'dojo2'], shrines: ['shrine', 'fox', 'falls'], inns: ['inn'], teahouses: ['teahouse'] };
 
 // A journey's stock: each dojo teaches three of the techniques (never the same three), each
-// shrine holds two of the blessings, the teahouse sells two charms and the inn one, beside
+// shrine holds two of the blessings, each teahouse sells two charms and each inn one, beside
 // one piece of gear.
-export function rollStock(rand) {
+export function rollStock(rand, ids = STOCK_IDS) {
   const stock = {};
   const tech = shuffle(artsOf('technique'), rand);
-  DOJO_IDS.forEach((id, i) => { stock[id] = tech.slice(i * 3, i * 3 + 3).map((t) => art(t)); });
+  ids.dojos.forEach((id, i) => { stock[id] = tech.slice(i * 3, i * 3 + 3).map((t) => art(t)); });
   const bless = shuffle(artsOf('blessing'), rand);
-  SHRINE_IDS.forEach((id, i) => { stock[id] = bless.slice(i * 2, i * 2 + 2).map(blessing); });
+  ids.shrines.forEach((id, i) => { stock[id] = bless.slice(i * 2, i * 2 + 2).map(blessing); });
   const charms = shuffle(artsOf('charm'), rand);
-  stock.teahouse = [...TEAHOUSE, charm(charms[0], rand), charm(charms[1], rand)];
+  let c = 0;
+  const nextCharm = () => charm(charms[c++ % charms.length], rand);
+  for (const id of ids.teahouses) stock[id] = [...TEAHOUSE, nextCharm(), nextCharm()];
   const gear = INN.filter((o) => o.id === 'sandals' || o.id === 'whetstone');
-  stock.inn = [...INN.filter((o) => !gear.includes(o)), gear[Math.floor(rand() * gear.length)], charm(charms[2], rand)];
+  const first = Math.floor(rand() * gear.length);
+  ids.inns.forEach((id, i) => { stock[id] = [...INN.filter((o) => !gear.includes(o)), gear[(first + i) % gear.length], nextCharm()]; });
   return stock;
 }
 const ONSEN = [
@@ -165,9 +169,9 @@ const DONE = {
 };
 
 export function stopCard(stop, run, note = null) {
-  if (stop.kind === 'great') return greatCard(stop, run);
+  if (stop.kind === 'great') return stop.card ? stop.card(run) : greatCard(stop, run);
   const items = offers(stop, run);
-  const [sub, line] = GREETING[stop.id] ?? GREETING[stop.kind];
+  const [sub, line] = stop.greeting ?? GREETING[stop.id] ?? GREETING[stop.kind];
   const done = run.learned[stop.id] ? DONE[stop.kind] : null;
   const say = note ?? done ?? line;
   const buttons = items.map((o, i) => `

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Duel at Dawn: Summer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./spring.css" />
+    <link rel="stylesheet" href="./summer.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <canvas id="ink"></canvas>
+    <div id="paper"></div>
+    <div id="flash"></div>
+    <div id="hud" class="hidden">
+      <div id="enemy-panel" class="panel"></div>
+      <div id="player-panel" class="panel"></div>
+      <div id="callout"></div>
+      <div id="subcallout"></div>
+    </div>
+    <div id="bars"><i></i><i></i></div>
+    <div id="cut-title"></div>
+    <div id="place"></div>
+    <div id="run" class="hidden"></div>
+    <div id="prompt"></div>
+    <div id="map"><canvas></canvas><p>the summer road · M or Esc to close</p></div>
+    <div id="hint" class="hidden">WASD walk · Shift run · mouse to look · wheel to zoom · E at a door · M map · F skip to the temple</div>
+    <div id="screen">
+      <div class="card title">
+        <h1>夏 Summer</h1>
+        <p class="sub">the rainy season, the road to the hydrangea temple</p>
+        <div class="choices"><button id="begin"><b>Walk the valley</b><span>click or press Enter</span></button></div>
+        <table class="controls">
+          <tr><th>W A S D</th><td>Walk (toward where the camera looks)</td></tr>
+          <tr><th>Shift</th><td>Run</td></tr>
+          <tr><th>Mouse</th><td>Look around (click to lock the mouse, Esc to free it; or drag)</td></tr>
+          <tr><th>Arrow keys</th><td>Turn the camera</td></tr>
+          <tr><th>Wheel</th><td>Camera distance</td></tr>
+          <tr><th>E</th><td>Go into a stop by the road (1–4 to choose, Esc to leave)</td></tr>
+          <tr><th>M</th><td>The road map</td></tr>
+          <tr><th>In a duel</th><td>Q / E stance, click or J strike, hold right click or K to guard, Space evade, Shift draw-cut, Esc pause</td></tr>
+        </table>
+        <p class="rules">Cross the swollen river on the boat bridge and walk north through the flooded rice terraces, the lantern village and the bamboo, over the ford and up the hydrangea steps to the temple.
+        Fighters wait on the road, and they are different men every journey; two hard duels guard the climb, and each side path keeps a fighter of its own. Ambushers rise out of the reeds and the straw. Your wounds stay with you, and if you fall the journey is over.
+        Beside the road: a teahouse on stilts, two inns, two dojos, three shrines, and a masked stranger with dice. The rain comes and goes.</p>
+      </div>
+    </div>
+    <script type="module" src="./src/summer/main.js"></script>
+  </body>
+</html>

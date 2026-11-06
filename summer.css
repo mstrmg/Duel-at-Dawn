@@ -1,0 +1,9 @@
+/* The Summer map: the same page as Spring's (spring.css), plus the lightning flash. */
+#flash {
+  position: fixed;
+  inset: 0;
+  background: #fbf8ef;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+}

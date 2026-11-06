@@ -2,12 +2,14 @@
 // play it, and it can be published as an artifact.
 //   dist/duel-at-dawn.html  the combat prototype (index.html)
 //   dist/spring-map.html    the Spring map explorer (spring.html)
+//   dist/summer-map.html    the Summer map explorer (summer.html)
 import { build } from 'vite';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 
 const PAGES = [
   { html: 'index.html', out: 'duel-at-dawn.html', title: 'Duel at Dawn', css: ['style.css'] },
   { html: 'spring.html', out: 'spring-map.html', title: 'Duel at Dawn: Spring', css: ['style.css', 'spring.css'] },
+  { html: 'summer.html', out: 'summer-map.html', title: 'Duel at Dawn: Summer', css: ['style.css', 'spring.css', 'summer.css'] },
 ];
 const only = process.argv[2];
 

@@ -119,6 +119,15 @@ export const ACCENTS = {
   deserter: 0x1f8f99, // the torn teal banner still on his back
   yamabushi: 0x4f9fd8, // the sky-blue pompoms of a mountain ascetic's sash
   petal: PINK.deep, // the Petal Blade: all of his clothes, while he holds the color (bloomMaterial)
+  // the Summer road
+  drifter: 0xe0c040, // the mustard cord tying his straw rain cape
+  monk: 0xd9802a, // the orange stole of a warrior monk
+  boatman: 0x2a8f9d, // a teal towel twisted round his head
+  sickle: 0x6aa84f, // the green-wrapped handle of his sickle
+  farmer: 0x3f7fbf, // a blue cotton towel under his hat
+  retainer: 0x6a3fa8, // the violet crest on his stiff shoulders
+  abbot: 0xb02a5a, // the plum kesa over his armor
+  umbrella: 0x4a6fa5, // the slate-blue paper of his umbrella
 };
 export const WOUND_RED = 0xb3171d;
 
@@ -327,6 +336,60 @@ function buildYari(tassel = null) {
   return { group: g, tip: new THREE.Vector3(0, 0, 2.06), length: 2.06 };
 }
 
+// a naginata: a long shaft with a curved blade on the end, its back to the sky
+function buildNaginata(stole = null) {
+  const g = new THREE.Group();
+  mesh(new THREE.CylinderGeometry(0.021, 0.025, 2.4, 7), 0.3, g, [0, 0, 0.3], [Math.PI / 2, 0, 0]);
+  mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.12, 8), 0.1, g, [0, 0, 1.5], [Math.PI / 2, 0, 0]); // the collar
+  // the blade: segments along a shallow curve, widening then tapering to the point
+  const segs = 6;
+  for (let i = 0; i < segs; i++) {
+    const t0 = i / segs, t1 = (i + 1) / segs;
+    const z0 = 1.56 + t0 * 0.62, z1 = 1.56 + t1 * 0.62;
+    const y0 = t0 * t0 * 0.16, y1 = t1 * t1 * 0.16;
+    const w = 0.07 * (1 - t0 * 0.7) + 0.02;
+    const b = mesh(new THREE.BoxGeometry(0.012, 1, w), 0.95, g);
+    placeLimb(b, new THREE.Vector3(0, y0, z0), new THREE.Vector3(0, y1, z1));
+  }
+  if (stole) {
+    // a strip of cloth bound under the blade
+    const c = accent(stole);
+    mesh(new THREE.BoxGeometry(0.04, 0.24, 0.012), c, g, [0, -0.12, 1.44], [0.2, 0, 0]);
+  }
+  mesh(new THREE.CylinderGeometry(0.026, 0.03, 0.08, 8), 0.1, g, [0, 0, -0.9], [Math.PI / 2, 0, 0]); // the butt
+  return { group: g, tip: new THREE.Vector3(0, 0.16, 2.18), length: 2.18 };
+}
+
+// a boatman's hooked pole: a long shaft with an iron point and a hook
+function buildBoathook(band = null) {
+  const y = buildYari(band);
+  mesh(new THREE.BoxGeometry(0.02, 0.02, 0.2), 0.15, y.group, [0, 0.07, 1.66], [-0.9, 0, 0]);
+  return y;
+}
+
+// a sickle: a short wooden handle and a hooked blade across its end; with a chain and
+// weight hung from the butt it is a kusarigama
+function buildKama(wrap = null, chain = false) {
+  const g = new THREE.Group();
+  mesh(facet(new THREE.CylinderGeometry(0.02, 0.018, 0.5, 6, 3)), 0.45, g, [0, 0, 0.1], [Math.PI / 2, 0, 0]);
+  if (wrap) mesh(new THREE.CylinderGeometry(0.023, 0.023, 0.18, 7), accent(wrap), g, [0, 0, -0.04], [Math.PI / 2, 0, 0]);
+  // the blade: a curve out from the head of the handle, its edge on the inside
+  const segs = 5;
+  let prev = new THREE.Vector3(0, 0, 0.35);
+  for (let i = 1; i <= segs; i++) {
+    const a = (i / segs) * 1.35;
+    const cur = new THREE.Vector3(0, Math.sin(a) * 0.3, 0.35 + (1 - Math.cos(a)) * 0.12 + Math.sin(a) * 0.06);
+    const b = mesh(new THREE.BoxGeometry(0.01, 1, 0.05 - i * 0.006), 0.95, g);
+    placeLimb(b, prev, cur);
+    prev = cur;
+  }
+  if (chain) {
+    for (let k = 0; k < 6; k++) mesh(new THREE.TorusGeometry(0.022, 0.006, 4, 8), 0.15, g, [0, -0.04 - k * 0.05, -0.16 - k * 0.01], [0, k % 2 ? Math.PI / 2 : 0, 0]);
+    mesh(new THREE.SphereGeometry(0.045, 8, 6), 0.12, g, [0, -0.34, -0.22]);
+  }
+  return { group: g, tip: prev.clone(), length: 0.6 };
+}
+
 function glintTexture(fill = '#b3171d') {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -398,6 +461,16 @@ const LOOKS = {
   thug: { kimono: 0.58, hakama: 0.5, obi: 0.4, collar: 0.8, hair: 0.08, hat: 'band', sleeve: 0.55, forearm: 0.88 },
   hungry: { kimono: 0.7, hakama: 0.56, obi: 0.32, collar: 0.9, hair: 0.12, hat: 'kasa', sleeve: 0.66, forearm: 0.9, mantle: 0.55 },
   ashigaru: { kimono: 0.62, hakama: 0.5, obi: 0.4, collar: 0.9, hair: 0.05, hat: 'jingasa', sleeve: 0.6, forearm: 0.25, armor: 0.36 },
+  // the Summer road: men out in the rain
+  drifter: { kimono: 0.6, hakama: 0.44, obi: 0.3, collar: 0.9, hair: 0.1, hat: 'kasa', sleeve: 0.56, forearm: 0.9, mino: 0.7 },
+  monk: { kimono: 0.86, hakama: 0.6, obi: 0.3, collar: 0.95, hair: 0.05, hat: 'hood', sleeve: 0.82, forearm: 0.9, weapon: 'naginata' },
+  boatman: { kimono: 0.72, hakama: 0.52, obi: 0.35, collar: 0.85, hair: 0.08, hat: 'band', sleeve: 0.66, forearm: 0.86, weapon: 'boathook' },
+  sickle: { kimono: 0.64, hakama: 0.52, obi: 0.4, collar: 0.85, hair: 0.1, hat: 'band', sleeve: 0.6, forearm: 0.88, weapon: 'kama' },
+  farmer: { kimono: 0.62, hakama: 0.5, obi: 0.4, collar: 0.85, hair: 0.1, hat: 'kasa', sleeve: 0.6, forearm: 0.88, mino: 0.66, weapon: 'kusarigama' },
+  retainer: { kimono: 0.4, hakama: 0.26, obi: 0.6, collar: 0.95, hair: 0.04, hat: 'topknot', sleeve: 0.4, forearm: 0.9, kataginu: 0.22, wakizashi: true },
+  abbot: { kimono: 0.3, hakama: 0.5, obi: 0.3, collar: 0.95, hair: 0.05, hat: 'hood', sleeve: 0.32, forearm: 0.25, armor: 0.3, weapon: 'naginata' },
+  umbrella: { kimono: 0.24, hakama: 0.18, obi: 0.72, collar: 0.95, hair: 0.04, hat: 'topknot', sleeve: 0.24, forearm: 0.9, umbrella: true },
+  paddy: { kimono: 0.68, hakama: 0.56, obi: 0.42, collar: 0.85, hair: 0.1, hat: 'kasa', sleeve: 0.64, forearm: 0.88, weapon: 'kama' },
 };
 
 export class FighterModel {
@@ -461,6 +534,27 @@ export class FighterModel {
     mesh(new THREE.BoxGeometry(0.2, 0.1, 0.07), L.obi, B, [0, 0.96, -0.2]);
 
     if (L.armor !== undefined) this.buildArmor(L);
+    if (L.mino !== undefined) {
+      // a straw rain cape: a shaggy bell of straw from the shoulders to below the knees
+      const mino = mesh(
+        lathe([[0.5, 0.52], [0.44, 0.75], [0.38, 1.0], [0.33, 1.24], [0.26, 1.42], [0.14, 1.53]], 11, true),
+        L.mino, B
+      );
+      mino.scale.z = 0.86;
+      for (let k = 0; k < 11; k++) {
+        const a = (k / 11) * Math.PI * 2;
+        mesh(new THREE.BoxGeometry(0.03, 0.22, 0.012), 0.35, B, [Math.sin(a) * 0.49, 0.6, Math.cos(a) * 0.42], [0, a, 0]);
+      }
+      if (ACCENTS[look]) for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.03, 0.16, 0.012), accent(ACCENTS[look]), B, [sx * 0.07, 1.47, 0.19], [0.2, 0, sx * 0.4]);
+    }
+    if (L.kataginu !== undefined) {
+      // kataginu: a retainer's stiff winged vest, the shoulders standing out square
+      for (const sx of [-1, 1]) {
+        mesh(new THREE.BoxGeometry(0.34, 0.03, 0.3), L.kataginu, B, [sx * 0.3, 1.47, 0], [0, 0, sx * -0.12]);
+        mesh(new THREE.BoxGeometry(0.16, 0.42, 0.03), L.kataginu, B, [sx * 0.1, 1.24, 0.19], [0.08, 0, sx * 0.08]);
+        mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.01, 12), accent(ACCENTS[look] ?? 0x6a3fa8), B, [sx * 0.11, 1.36, 0.208], [Math.PI / 2, 0, 0]);
+      }
+    }
     if (L.mantle !== undefined) {
       // ragged traveling mantle over the shoulders
       const mantle = mesh(
@@ -490,6 +584,10 @@ export class FighterModel {
       // wide straw kasa that hides his eyes
       mesh(facet(new THREE.ConeGeometry(0.54, 0.22, 20, 1, true)), 0.86, B, [0, 1.86, 0.02], [0.06, 0, 0]);
       mesh(new THREE.TorusGeometry(0.535, 0.01, 4, 40), 0.3, B, [0, 1.75, 0.03], [Math.PI / 2 + 0.06, 0, 0]);
+      if (look === 'farmer') {
+        // a blue cotton towel tied over the head under the hat
+        mesh(new THREE.SphereGeometry(0.135, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), accent(ACCENTS.farmer), B, [0, 1.72, -0.01], [-0.3, 0, 0]);
+      }
       if (look === 'ronin') {
         // a band of indigo cloth round the kasa, its ties hanging under the chin
         const ind = accent(ACCENTS.ronin);
@@ -498,7 +596,7 @@ export class FighterModel {
       }
     } else if (L.hat === 'band') {
       // a twisted headband knotted at the back, the tails loose (persimmon on the Bandit)
-      const band = look === 'bandit' ? accent(ACCENTS.bandit) : hatch(0.88);
+      const band = look === 'bandit' || look === 'boatman' ? accent(ACCENTS[look]) : hatch(0.88);
       mesh(new THREE.CylinderGeometry(0.135, 0.135, 0.06, 18, 1, true), band, B, [0, 1.75, 0.0], [0.2, 0, 0], [0.96, 1, 1.06]);
       mesh(new THREE.BoxGeometry(0.055, 0.32, 0.012), band, B, [0.05, 1.6, -0.16], [0.6, 0, 0.3]);
       mesh(new THREE.BoxGeometry(0.055, 0.26, 0.012), band, B, [-0.04, 1.62, -0.16], [0.7, 0, -0.25]);
@@ -520,6 +618,9 @@ export class FighterModel {
       // a yamabushi's little black cap, tied on over the brow
       mesh(facet(new THREE.CylinderGeometry(0.03, 0.075, 0.09, 12)), 0.06, B, [0, 1.84, 0.07], [0.35, 0, 0]);
       mesh(new THREE.TorusGeometry(0.124, 0.006, 4, 20), 0.1, B, [0, 1.76, 0.0], [Math.PI / 2 + 0.3, 0, 0]);
+    } else if (L.hat === 'topknot') {
+      // shaved crown and a neat topknot laid forward: a samurai in his lord's service
+      mesh(new THREE.CylinderGeometry(0.024, 0.02, 0.14, 7), L.hair, B, [0, 1.84, 0.01], [Math.PI / 2 - 0.2, 0, 0]);
     } else if (L.hat === 'jingasa') {
       mesh(facet(new THREE.ConeGeometry(0.4, 0.13, 16, 1)), 0.2, B, [0, 1.86, 0]);
       mesh(new THREE.SphereGeometry(0.03, 8, 6), 0.9, B, [0, 1.93, 0]);
@@ -536,12 +637,32 @@ export class FighterModel {
     }
 
     // scabbard at the left hip for sword users
-    if (weaponKind === 'katana') {
+    if (weaponKind === 'katana' && !L.weapon) {
       const saya = mesh(new THREE.CylinderGeometry(0.022, 0.018, 1, 8), 0.12, B);
       placeLimb(saya, new THREE.Vector3(0.22, 0.98, 0.24), new THREE.Vector3(0.33, 0.7, -0.58));
       mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.03, 8), 0.8, B, [0.225, 0.975, 0.22], [Math.PI / 2 - 0.35, 0, 0]);
     }
 
+    if (L.wakizashi) {
+      // the short sword, worn beside the long one
+      const w = mesh(new THREE.CylinderGeometry(0.02, 0.017, 0.62, 8), 0.12, B);
+      placeLimb(w, new THREE.Vector3(0.17, 1.0, 0.25), new THREE.Vector3(0.27, 0.86, -0.3));
+      mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 6), 0.3, B, [0.16, 1.03, 0.36], [Math.PI / 2 - 0.25, 0, 0]);
+    }
+    if (L.umbrella) {
+      // an oiled paper umbrella, closed, slung across his back
+      const u = accent(ACCENTS.umbrella);
+      const shaft = mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.0, 6), 0.3, B);
+      placeLimb(shaft, new THREE.Vector3(-0.25, 0.75, -0.24), new THREE.Vector3(0.3, 1.7, -0.22));
+      const furled = mesh(new THREE.CylinderGeometry(0.03, 0.07, 0.62, 10), u, B);
+      placeLimb(furled, new THREE.Vector3(-0.12, 0.98, -0.25), new THREE.Vector3(0.22, 1.58, -0.23));
+    }
+    if (look === 'monk' || look === 'abbot') {
+      // a stole of colored cloth over one shoulder
+      const st = accent(ACCENTS[look]);
+      const band = mesh(new THREE.BoxGeometry(0.1, 1, 0.02), st, B);
+      placeLimb(band, new THREE.Vector3(0.16, 1.48, 0.17), new THREE.Vector3(-0.14, 0.98, 0.22));
+    }
     if (look === 'wanderer') {
       // a sake gourd hung from his sash
       const gd = accent(ACCENTS.wanderer);
@@ -605,7 +726,11 @@ export class FighterModel {
     this.weaponPivot = new THREE.Group();
     this.weaponPivot.rotation.order = 'YXZ';
     B.add(this.weaponPivot);
-    const w = weaponKind === 'yari' ? buildYari(look === 'spearman' ? ACCENTS.spearman : null) : buildKatana();
+    const w = L.weapon === 'naginata' ? buildNaginata(ACCENTS[look])
+      : L.weapon === 'boathook' ? buildBoathook()
+      : L.weapon === 'kama' ? buildKama(ACCENTS[look] ?? null)
+      : L.weapon === 'kusarigama' ? buildKama(null, true)
+      : weaponKind === 'yari' ? buildYari(look === 'spearman' ? ACCENTS.spearman : null) : buildKatana();
     if (L.long) w.group.scale.setScalar(L.long); // a nodachi: the great field sword
     this.weapon = w;
     this.weaponPivot.add(w.group);
